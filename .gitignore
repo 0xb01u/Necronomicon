@@ -3,3 +3,6 @@ target/
 
 # Own data stuff:
 data/
+
+# Frontend (temporarily):
+front/
