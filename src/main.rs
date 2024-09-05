@@ -21,7 +21,7 @@ use std::fs;
 use std::path::Path;
 use std::sync::{LazyLock, RwLock};
 
-use actix_web::{delete, get, middleware::Logger, post, web, App, HttpResponse, HttpServer};
+use actix_web::{delete, get, post, web, App, HttpResponse, HttpServer};
 use getset::{Getters, Setters};
 use serde::{Deserialize, Serialize};
 
@@ -1020,7 +1020,6 @@ async fn main() -> std::io::Result<()> {
     // Create and run server:
     HttpServer::new(|| {
         App::new()
-            .wrap(Logger::default())
             .service(
                 // Services for all enemy-related stuff:
                 web::scope("/enemy")
