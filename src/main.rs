@@ -1,5 +1,5 @@
 /*
- *  Necronomicon: Web app for storing and displaying information about D&D 
+ *  Necronomicon: Web app for storing and displaying information about D&D
  *  enemies.
  *  Copyright (C) 2024  Bolu <bolu@tuta.io>
  *
@@ -21,9 +21,17 @@ use std::fs;
 use std::path::Path;
 use std::sync::{LazyLock, RwLock};
 
-use actix_web::{delete, get, post, web, App, HttpResponse, HttpServer};
+use actix_web::{delete, get, middleware::Logger, post, web, App, HttpResponse, HttpServer};
 use getset::{Getters, Setters};
 use serde::{Deserialize, Serialize};
+
+/* Macro to generate the correct target saving location for web pages. */
+#[macro_export]
+macro_rules! webpage_path {
+    ($uri:expr) => {
+        format!("front/{}", $uri)
+    };
+}
 
 #[cfg_attr(debug_assertions, derive(Debug))]
 #[derive(Clone, Serialize, Deserialize)]
@@ -167,16 +175,11 @@ impl Enemy {
         self.misc.remove(idx - 1);
     }
 
-    fn load(name: String) -> Enemy {
-        let json = fs::read_to_string(Enemy::to_uri_data(&name))
-            .expect(format!("Could not read {}", Enemy::to_uri_data(&name)).as_str());
-        serde_json::from_str(&json).expect(
-            format!(
-                "Could not parse {} as valid JSON data.",
-                Enemy::to_uri_data(&name)
-            )
-            .as_str(),
-        )
+    fn load(path: String) -> Enemy {
+        let json =
+            fs::read_to_string(&path).expect(format!("Could not read {}", path.clone()).as_str());
+        serde_json::from_str(&json)
+            .expect(format!("Could not parse {} as valid JSON data.", path).as_str())
     }
 
     fn save(&self) {
@@ -236,21 +239,21 @@ impl Enemy {
             return None;
         }
 
-        let mut md = "---\nlayout: default\n---\n".to_owned();
+        let mut md = format!("---\nlayout: default\ntitle: {}\n---\n", self.name);
 
         md.push_str(format!("# {} <a name=\"main\"></a>\n", self.name).as_str());
         // Table of contents:
         md.push_str(
-            "1. [Basic information](#basics)\n
-             \t1.1 [Traits](#traits)\n
-             2. [Ability modifiers](#stats)\n
-             2. [Skills](#skills)\n
-             4. [Resistances, immunities, vulnerabilities](#riv)\n
-             \t4.1 [Resistances](#resistances)\n
-             \t4.2 [Immunities](#immunities)\n
-             \t4.3 [Vulnerabilities](#vulnerabilities)\n
-             5. [Abilities](#abilities)\n
-             6. [Extra notes](#misc)\n",
+            "1. [Basic information](#basics)\n\
+             \t1. [Traits](#traits)\n\
+             2. [Ability modifiers](#stats)\n\
+             2. [Skills](#skills)\n\
+             4. [Resistances, immunities, vulnerabilities](#riv)\n\
+             \t1. [Resistances](#resistances)\n\
+             \t2. [Immunities](#immunities)\n\
+             \t3. [Vulnerabilities](#vulnerabilities)\n\
+             5. [Abilities](#abilities)\n\
+             6. [Extra notes](#misc)\n\n",
         );
 
         if self.revealed_basics {
@@ -284,37 +287,31 @@ impl Enemy {
                 md.push_str(format!("- **STR:** {:+}\n", self.str).as_str());
             } else {
                 md.push_str(format!("- **STR:** {:+} / {:+}\n", self.str, self.str_sav).as_str());
-
             }
             if self.dex == self.dex_sav {
                 md.push_str(format!("- **DEX:** {:+}\n", self.dex).as_str());
             } else {
                 md.push_str(format!("- **DEX:** {:+} / {:+}\n", self.dex, self.dex_sav).as_str());
-
             }
             if self.con == self.con_sav {
                 md.push_str(format!("- **CON:** {:+}\n", self.con).as_str());
             } else {
                 md.push_str(format!("- **CON:** {:+} / {:+}\n", self.con, self.con_sav).as_str());
-
             }
             if self.int == self.int_sav {
                 md.push_str(format!("- **INT:** {:+}\n", self.int).as_str());
             } else {
                 md.push_str(format!("- **INT:** {:+} / {:+}\n", self.int, self.int_sav).as_str());
-
             }
             if self.wis == self.wis_sav {
                 md.push_str(format!("- **WIS:** {:+}\n", self.wis).as_str());
             } else {
                 md.push_str(format!("- **WIS:** {:+} / {:+}\n", self.wis, self.wis_sav).as_str());
-
             }
             if self.str == self.str_sav {
                 md.push_str(format!("- **CHA:** {:+}\n", self.cha).as_str());
             } else {
                 md.push_str(format!("- **CHA:** {:+} / {:+}\n", self.cha, self.cha_sav).as_str());
-
             }
         }
 
@@ -323,7 +320,7 @@ impl Enemy {
 
             for skill in &self.skills {
                 // TODO: Itemize instead of list?
-                    md.push_str(
+                md.push_str(
                     format!(
                         "[{}](../skills/{}.html), ",
                         skill,
@@ -399,7 +396,7 @@ impl Enemy {
             }
         }
 
-        let uri = self.uri_page();
+        let uri = webpage_path!(self.uri_page());
         fs::write(&uri, md).expect(format!("Could not write {}.", &uri).as_str());
         Some(uri)
     }
@@ -467,14 +464,14 @@ fn populate_riv_effects() {
 fn gen_riv_page() {
     let riv_effects = shm_acc_r!(RIV_EFFECTS);
 
-    let mut md = "---\nlayout: default\n---\n".to_owned();
+    let mut md = "---\nlayout: default\ntitle: RIV effects\n---\n".to_owned();
     md.push_str("# Resistance, immunity and vulnerability effects list\n");
 
     for effect in riv_effects.values() {
         md.push_str(format!("- {} ({})\n", effect.name, effect.category).as_str());
     }
 
-    fs::write("riv.md", md).expect("Could not write riv.md.");
+    fs::write(webpage_path!("data/riv.md"), md).expect("Could not write data/riv.md.");
 }
 
 /**
@@ -522,7 +519,7 @@ fn gen_traits_page() {
     // Sort for better human searching:
     traits.sort_by_key(|e| e.name.clone());
 
-    let mut md = "---\nlayout: default\n---\n".to_owned();
+    let mut md = "---\nlayout: default\ntitle: Trait list\n---\n".to_owned();
     md.push_str("# Trait list\n");
 
     let mut idx = 1;
@@ -555,7 +552,7 @@ fn gen_traits_page() {
         md.push_str("\n");
     }
 
-    fs::write("traits.md", md).expect("Could not write traits.md.");
+    fs::write(webpage_path!("data/traits.md"), md).expect("Could not write data/traits.md.");
 }
 
 /**
@@ -616,9 +613,10 @@ struct EnemyAbilityForm {
  */
 #[post("/")]
 async fn create_enemy(form: web::Json<String>) -> HttpResponse {
-    let name = Enemy::to_uri_data(&form);
+    let name = form.into_inner();
 
-    if Path::new(&name).exists() {
+    if Path::new(&Enemy::to_uri_data(&name)).exists() {
+        // TODO: What to do with data leaks here?
         return HttpResponse::Forbidden().finish();
     }
 
@@ -633,13 +631,13 @@ async fn create_enemy(form: web::Json<String>) -> HttpResponse {
  */
 #[get("/")]
 async fn retrieve_enemy(form: web::Json<String>) -> HttpResponse {
-    let name = Enemy::to_uri_data(&form);
+    let data_path = Enemy::to_uri_data(&form);
 
-    if !Path::new(&name).exists() {
+    if !Path::new(&data_path).exists() {
         return HttpResponse::NotFound().finish();
     }
 
-    let enemy = Enemy::load(name);
+    let enemy = Enemy::load(data_path);
 
     if !enemy.revealed {
         // Return NotFound here too, to not leak unrevealed enemies.
@@ -657,13 +655,13 @@ async fn enemy_set_basics(
     path: web::Path<String>,
     form: web::Json<EnemyBasicsForm>,
 ) -> HttpResponse {
-    let name = Enemy::to_uri_data(&path.into_inner());
+    let data_path = Enemy::to_uri_data(&path.into_inner());
 
-    if !Path::new(&name).exists() {
+    if !Path::new(&data_path).exists() {
         return HttpResponse::NotFound().finish();
     }
 
-    let mut enemy = Enemy::load(name);
+    let mut enemy = Enemy::load(data_path);
 
     enemy.set_enemy_type(form.enemy_type.clone());
     enemy.set_hp(form.hp);
@@ -695,13 +693,13 @@ async fn enemy_set_attrs(
     path: web::Path<String>,
     form: web::Json<EnemyAttributesForm>,
 ) -> HttpResponse {
-    let name = Enemy::to_uri_data(&path.into_inner());
+    let data_path = Enemy::to_uri_data(&path.into_inner());
 
-    if !Path::new(&name).exists() {
+    if !Path::new(&data_path).exists() {
         return HttpResponse::NotFound().finish();
     }
 
-    let mut enemy = Enemy::load(name);
+    let mut enemy = Enemy::load(data_path);
 
     enemy.set_str(form.str);
     enemy.set_dex(form.dex);
@@ -726,17 +724,14 @@ async fn enemy_set_attrs(
  * Endpoint for modifying the skills of an enemy.
  */
 #[post("/{enemy}/skills")]
-async fn enemy_set_skills(
-    path: web::Path<String>,
-    form: web::Json<Vec<String>>,
-) -> HttpResponse {
-    let name = Enemy::to_uri_data(&path.into_inner());
+async fn enemy_set_skills(path: web::Path<String>, form: web::Json<Vec<String>>) -> HttpResponse {
+    let data_path = Enemy::to_uri_data(&path.into_inner());
 
-    if !Path::new(&name).exists() {
+    if !Path::new(&data_path).exists() {
         return HttpResponse::NotFound().finish();
     }
 
-    let mut enemy = Enemy::load(name);
+    let mut enemy = Enemy::load(data_path);
 
     enemy.set_skills(form.into_inner());
 
@@ -748,13 +743,13 @@ async fn enemy_set_skills(
  */
 #[post("/{enemy}/riv")]
 async fn enemy_set_riv(path: web::Path<String>, form: web::Json<EnemyRIVForm>) -> HttpResponse {
-    let name = Enemy::to_uri_data(&path.into_inner());
+    let data_path = Enemy::to_uri_data(&path.into_inner());
 
-    if !Path::new(&name).exists() {
+    if !Path::new(&data_path).exists() {
         return HttpResponse::NotFound().finish();
     }
 
-    let mut enemy = Enemy::load(name);
+    let mut enemy = Enemy::load(data_path);
 
     let riv_map = shm_acc_r!(RIV_EFFECTS);
 
@@ -807,13 +802,13 @@ async fn enemy_add_ability_trees(
     path: web::Path<String>,
     form: web::Json<Vec<String>>,
 ) -> HttpResponse {
-    let name = Enemy::to_uri_data(&path.into_inner());
+    let data_path = Enemy::to_uri_data(&path.into_inner());
 
-    if !Path::new(&name).exists() {
+    if !Path::new(&data_path).exists() {
         return HttpResponse::NotFound().finish();
     }
 
-    let mut enemy = Enemy::load(name);
+    let mut enemy = Enemy::load(data_path);
 
     for tree_name in form.into_inner() {
         enemy.add_ability_tree(tree_name.clone());
@@ -832,13 +827,13 @@ async fn enemy_add_ability(
     path: web::Path<String>,
     form: web::Json<EnemyAbilityForm>,
 ) -> HttpResponse {
-    let name = Enemy::to_uri_data(&path.into_inner());
+    let data_path = Enemy::to_uri_data(&path.into_inner());
 
-    if !Path::new(&name).exists() {
+    if !Path::new(&data_path).exists() {
         return HttpResponse::NotFound().finish();
     }
 
-    let mut enemy = Enemy::load(name);
+    let mut enemy = Enemy::load(data_path);
 
     let tree = &form.tree;
     if !enemy.ability_trees().contains_key(tree) {
@@ -856,13 +851,13 @@ async fn enemy_add_ability(
  */
 #[post("/{enemy}/note")]
 async fn enemy_add_note(path: web::Path<String>, form: web::Json<String>) -> HttpResponse {
-    let name = Enemy::to_uri_data(&path.into_inner());
+    let data_path = Enemy::to_uri_data(&path.into_inner());
 
-    if !Path::new(&name).exists() {
+    if !Path::new(&data_path).exists() {
         return HttpResponse::NotFound().finish();
     }
 
-    let mut enemy = Enemy::load(name);
+    let mut enemy = Enemy::load(data_path);
 
     enemy.add_misc(form.into_inner().clone());
 
@@ -877,13 +872,13 @@ async fn enemy_add_note(path: web::Path<String>, form: web::Json<String>) -> Htt
  */
 #[delete("/{enemy}/note")]
 async fn enemy_del_note(path: web::Path<String>, form: web::Json<usize>) -> HttpResponse {
-    let name = Enemy::to_uri_data(&path.into_inner());
+    let data_path = Enemy::to_uri_data(&path.into_inner());
 
-    if !Path::new(&name).exists() {
+    if !Path::new(&data_path).exists() {
         return HttpResponse::NotFound().finish();
     }
 
-    let mut enemy = Enemy::load(name);
+    let mut enemy = Enemy::load(data_path);
 
     let idx = form.into_inner();
     if idx >= enemy.misc().len() {
@@ -902,13 +897,13 @@ async fn enemy_del_note(path: web::Path<String>, form: web::Json<usize>) -> Http
  */
 #[post("/{enemy}/reveal")]
 async fn reveal_enemy(path: web::Path<String>) -> HttpResponse {
-    let name = Enemy::to_uri_data(&path.into_inner());
+    let data_path = Enemy::to_uri_data(&path.into_inner());
 
-    if !Path::new(&name).exists() {
+    if !Path::new(&data_path).exists() {
         return HttpResponse::NotFound().finish();
     }
 
-    let mut enemy = Enemy::load(name);
+    let mut enemy = Enemy::load(data_path);
 
     enemy.set_revealed(true);
 
@@ -924,13 +919,13 @@ async fn reveal_enemy(path: web::Path<String>) -> HttpResponse {
 #[post("/{enemy}/reveal/{info}")]
 async fn reveal_enemy_info(path: web::Path<(String, String)>) -> HttpResponse {
     let (name, info) = path.into_inner();
-    let name = Enemy::to_uri_data(&name);
+    let data_path = Enemy::to_uri_data(&name);
 
-    if !Path::new(&name).exists() {
+    if !Path::new(&data_path).exists() {
         return HttpResponse::NotFound().finish();
     }
 
-    let mut enemy = Enemy::load(name);
+    let mut enemy = Enemy::load(data_path);
 
     match info.as_str() {
         "basics" => enemy.set_revealed_basics(true),
@@ -954,13 +949,13 @@ async fn reveal_enemy_ability(
     path: web::Path<String>,
     form: web::Json<EnemyAbilityForm>,
 ) -> HttpResponse {
-    let name = Enemy::to_uri_data(&path.into_inner());
+    let data_path = Enemy::to_uri_data(&path.into_inner());
 
-    if !Path::new(&name).exists() {
+    if !Path::new(&data_path).exists() {
         return HttpResponse::NotFound().finish();
     }
 
-    let mut enemy = Enemy::load(name);
+    let mut enemy = Enemy::load(data_path);
 
     let tree = &form.tree;
     if !enemy.ability_trees().contains_key(tree) {
@@ -1020,9 +1015,12 @@ async fn main() -> std::io::Result<()> {
     populate_traits();
     populate_riv_effects();
 
+    println!("Necronomicon listening on 127.0.0.1:8080");
+
     // Create and run server:
     HttpServer::new(|| {
         App::new()
+            .wrap(Logger::default())
             .service(
                 // Services for all enemy-related stuff:
                 web::scope("/enemy")
