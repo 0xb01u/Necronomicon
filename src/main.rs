@@ -326,8 +326,8 @@ impl Enemy {
                     md.push_str(
                     format!(
                         "[{}](../skills/{}.html), ",
-                        skill.name,
-                        skill.name.to_lowercase().replace(" ", "-")
+                        skill,
+                        skill.to_lowercase().replace(" ", "-")
                     )
                     .as_str(),
                 );
@@ -520,13 +520,13 @@ fn gen_traits_page() {
     // but the `traits` variable still references its information later.
     let mut traits = trait_map.values().collect::<Vec<&Trait>>();
     // Sort for better human searching:
-    traits.sort_by_key(|e| e.name);
+    traits.sort_by_key(|e| e.name.clone());
 
     let mut md = "---\nlayout: default\n---\n".to_owned();
     md.push_str("# Trait list\n");
 
     let mut idx = 1;
-    for t in traits {
+    for t in &traits {
         md.push_str(
             format!(
                 "{}. [{}](#{})\n",
@@ -665,7 +665,7 @@ async fn enemy_set_basics(
 
     let mut enemy = Enemy::load(name);
 
-    enemy.set_enemy_type(form.enemy_type);
+    enemy.set_enemy_type(form.enemy_type.clone());
     enemy.set_hp(form.hp);
     enemy.set_ac(form.ac);
     enemy.set_mov(form.mov);
@@ -738,7 +738,7 @@ async fn enemy_set_skills(
 
     let mut enemy = Enemy::load(name);
 
-    enemy.set_skills(form.into());
+    enemy.set_skills(form.into_inner());
 
     HttpResponse::Ok().finish()
 }
