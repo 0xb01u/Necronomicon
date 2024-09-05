@@ -51,6 +51,8 @@ struct Enemy {
     revealed: bool,
 
     #[getset(get, set)]
+    enemy_type: String,
+    #[getset(get, set)]
     hp: i16,
     #[getset(get, set)]
     ac: u8,
@@ -87,6 +89,11 @@ struct Enemy {
     cha_sav: u8,
     #[getset(get, set)]
     revealed_attrs: bool,
+
+    #[getset(get, set)]
+    skills: Vec<String>, // TODO: make hyper-linkable
+    #[getset(get, set)]
+    revealed_skills: bool,
 
     #[getset(get, set)]
     resistances: Vec<RivEffect>,
@@ -234,19 +241,21 @@ impl Enemy {
         md.push_str(format!("# {} <a name=\"main\"></a>\n", self.name).as_str());
         // Table of contents:
         md.push_str(
-            "1. [Basic features](#basics)\n
+            "1. [Basic information](#basics)\n
              \t1.1 [Traits](#traits)\n
              2. [Ability modifiers](#stats)\n
-             3. [Resistances, immunities, vulnerabilities](#riv)\n
-             \t3.1 [Resistances](#resistances)\n
-             \t3.2 [Immunities](#immunities)\n
-             \t3.3 [Vulnerabilities](#vulnerabilities)\n
-             4. [Abilities](#abilities)\n
-             5. [Extra notes](#misc)\n",
+             2. [Skills](#skills)\n
+             4. [Resistances, immunities, vulnerabilities](#riv)\n
+             \t4.1 [Resistances](#resistances)\n
+             \t4.2 [Immunities](#immunities)\n
+             \t4.3 [Vulnerabilities](#vulnerabilities)\n
+             5. [Abilities](#abilities)\n
+             6. [Extra notes](#misc)\n",
         );
 
         if self.revealed_basics {
             md.push_str("## Basic features <a name=\"basics\"></a>");
+            md.push_str(format!("{}\n", self.enemy_type).as_str());
             md.push_str(format!("- **HP:** {}\n", self.hp).as_str());
             md.push_str(format!("- **AC:** {}\n", self.ac).as_str());
             md.push_str(format!("- **Mov:** {}\n", self.mov).as_str());
@@ -271,12 +280,62 @@ impl Enemy {
 
         if self.revealed_attrs {
             md.push_str("## Ability modifiers <a name=\"stats\"></a>\n");
-            md.push_str(format!("- **STR:** +{}\n", self.str).as_str());
-            md.push_str(format!("- **DEX:** +{}\n", self.dex).as_str());
-            md.push_str(format!("- **CON:** +{}\n", self.con).as_str());
-            md.push_str(format!("- **INT:** +{}\n", self.int).as_str());
-            md.push_str(format!("- **WIS:** +{}\n", self.wis).as_str());
-            md.push_str(format!("- **CHA:** +{}\n", self.cha).as_str());
+            if self.str == self.str_sav {
+                md.push_str(format!("- **STR:** {:+}\n", self.str).as_str());
+            } else {
+                md.push_str(format!("- **STR:** {:+} / {:+}\n", self.str, self.str_sav).as_str());
+
+            }
+            if self.dex == self.dex_sav {
+                md.push_str(format!("- **DEX:** {:+}\n", self.dex).as_str());
+            } else {
+                md.push_str(format!("- **DEX:** {:+} / {:+}\n", self.dex, self.dex_sav).as_str());
+
+            }
+            if self.con == self.con_sav {
+                md.push_str(format!("- **CON:** {:+}\n", self.con).as_str());
+            } else {
+                md.push_str(format!("- **CON:** {:+} / {:+}\n", self.con, self.con_sav).as_str());
+
+            }
+            if self.int == self.int_sav {
+                md.push_str(format!("- **INT:** {:+}\n", self.int).as_str());
+            } else {
+                md.push_str(format!("- **INT:** {:+} / {:+}\n", self.int, self.int_sav).as_str());
+
+            }
+            if self.wis == self.wis_sav {
+                md.push_str(format!("- **WIS:** {:+}\n", self.wis).as_str());
+            } else {
+                md.push_str(format!("- **WIS:** {:+} / {:+}\n", self.wis, self.wis_sav).as_str());
+
+            }
+            if self.str == self.str_sav {
+                md.push_str(format!("- **CHA:** {:+}\n", self.cha).as_str());
+            } else {
+                md.push_str(format!("- **CHA:** {:+} / {:+}\n", self.cha, self.cha_sav).as_str());
+
+            }
+        }
+
+        if self.revealed_skills {
+            md.push_str("## Skills <a name=skills></a>\n");
+
+            for skill in &self.skills {
+                // TODO: Itemize instead of list?
+                    md.push_str(
+                    format!(
+                        "[{}](../skills/{}.html), ",
+                        skill.name,
+                        skill.name.to_lowercase().replace(" ", "-")
+                    )
+                    .as_str(),
+                );
+            }
+            md.pop(); // Remove leftover space.
+            md.pop(); // Remove leftover comma.
+
+            md.push_str("\n");
         }
 
         if self.revealed_riv {
@@ -461,13 +520,13 @@ fn gen_traits_page() {
     // but the `traits` variable still references its information later.
     let mut traits = trait_map.values().collect::<Vec<&Trait>>();
     // Sort for better human searching:
-    traits.sort_by_key(|e| &e.name);
+    traits.sort_by_key(|e| e.name);
 
     let mut md = "---\nlayout: default\n---\n".to_owned();
     md.push_str("# Trait list\n");
 
     let mut idx = 1;
-    for t in &traits {
+    for t in traits {
         md.push_str(
             format!(
                 "{}. [{}](#{})\n",
@@ -481,7 +540,7 @@ fn gen_traits_page() {
     }
     md.push_str("\n");
 
-    for t in &traits {
+    for t in traits {
         md.push_str(
             format!(
                 "## {} <a name=\"{}\"></a>\n",
@@ -512,12 +571,8 @@ fn update_traits_persistence() {
 /* Structures for the endpoint forms: */
 
 #[derive(Deserialize)]
-struct EnemyForm {
-    name: String,
-}
-
-#[derive(Deserialize)]
 struct EnemyBasicsForm {
+    enemy_type: String,
     hp: i16,
     ac: u8,
     mov: u8,
@@ -532,6 +587,12 @@ struct EnemyAttributesForm {
     int: u8,
     wis: u8,
     cha: u8,
+    str_sav: u8,
+    dex_sav: u8,
+    con_sav: u8,
+    int_sav: u8,
+    wis_sav: u8,
+    cha_sav: u8,
 }
 
 #[derive(Deserialize)]
@@ -554,8 +615,8 @@ struct EnemyAbilityForm {
  * Endpoint for creating a new enemy.
  */
 #[post("/")]
-async fn create_enemy(form: web::Json<EnemyForm>) -> HttpResponse {
-    let name = Enemy::to_uri_data(&form.name);
+async fn create_enemy(form: web::Json<String>) -> HttpResponse {
+    let name = Enemy::to_uri_data(&form);
 
     if Path::new(&name).exists() {
         return HttpResponse::Forbidden().finish();
@@ -571,8 +632,8 @@ async fn create_enemy(form: web::Json<EnemyForm>) -> HttpResponse {
  * Endpoint for retrieving the webpage for an enemy.
  */
 #[get("/")]
-async fn retrieve_enemy(form: web::Json<EnemyForm>) -> HttpResponse {
-    let name = Enemy::to_uri_data(&form.name);
+async fn retrieve_enemy(form: web::Json<String>) -> HttpResponse {
+    let name = Enemy::to_uri_data(&form);
 
     if !Path::new(&name).exists() {
         return HttpResponse::NotFound().finish();
@@ -585,7 +646,7 @@ async fn retrieve_enemy(form: web::Json<EnemyForm>) -> HttpResponse {
         return HttpResponse::NotFound().finish();
     }
 
-    HttpResponse::Ok().body(enemy.uri_page())
+    HttpResponse::Ok().body(enemy.uri_page().replace("md", "html"))
 }
 
 /**
@@ -604,6 +665,7 @@ async fn enemy_set_basics(
 
     let mut enemy = Enemy::load(name);
 
+    enemy.set_enemy_type(form.enemy_type);
     enemy.set_hp(form.hp);
     enemy.set_ac(form.ac);
     enemy.set_mov(form.mov);
@@ -648,7 +710,35 @@ async fn enemy_set_attrs(
     enemy.set_wis(form.wis);
     enemy.set_cha(form.cha);
 
+    enemy.set_str(form.str_sav);
+    enemy.set_dex(form.dex_sav);
+    enemy.set_con(form.con_sav);
+    enemy.set_int(form.int_sav);
+    enemy.set_wis(form.wis_sav);
+    enemy.set_cha(form.cha_sav);
+
     enemy.save();
+
+    HttpResponse::Ok().finish()
+}
+
+/**
+ * Endpoint for modifying the skills of an enemy.
+ */
+#[post("/{enemy}/skills")]
+async fn enemy_set_skills(
+    path: web::Path<String>,
+    form: web::Json<Vec<String>>,
+) -> HttpResponse {
+    let name = Enemy::to_uri_data(&path.into_inner());
+
+    if !Path::new(&name).exists() {
+        return HttpResponse::NotFound().finish();
+    }
+
+    let mut enemy = Enemy::load(name);
+
+    enemy.set_skills(form.into());
 
     HttpResponse::Ok().finish()
 }
@@ -752,7 +842,7 @@ async fn enemy_add_ability(
 
     let tree = &form.tree;
     if !enemy.ability_trees().contains_key(tree) {
-        return HttpResponse::BadRequest().body("ability tree");
+        return HttpResponse::BadRequest().body(tree.clone());
     }
     enemy.add_ability(tree, form.name.clone(), form.description.clone());
 
@@ -825,7 +915,7 @@ async fn reveal_enemy(path: web::Path<String>) -> HttpResponse {
     enemy.save();
     enemy.generate_markdown();
 
-    HttpResponse::Created().body(enemy.uri_page())
+    HttpResponse::Created().body(enemy.uri_page().replace("md", "html"))
 }
 
 /**
@@ -843,7 +933,9 @@ async fn reveal_enemy_info(path: web::Path<(String, String)>) -> HttpResponse {
     let mut enemy = Enemy::load(name);
 
     match info.as_str() {
+        "basics" => enemy.set_revealed_basics(true),
         "attrs" => enemy.set_revealed_attrs(true),
+        "skills" => enemy.set_revealed_skills(true),
         "riv" => enemy.set_revealed_riv(true),
         _ => return HttpResponse::BadRequest().body(info),
     };
@@ -872,12 +964,12 @@ async fn reveal_enemy_ability(
 
     let tree = &form.tree;
     if !enemy.ability_trees().contains_key(tree) {
-        return HttpResponse::BadRequest().body("ability tree");
+        return HttpResponse::BadRequest().body(tree.clone());
     }
 
     let ability = &form.name;
     if !enemy.ability_trees()[tree].contains_key(ability) {
-        return HttpResponse::BadRequest().body("ability");
+        return HttpResponse::BadRequest().body(ability.clone());
     }
 
     enemy.reveal_ability(tree, ability);
@@ -885,6 +977,7 @@ async fn reveal_enemy_ability(
     HttpResponse::Ok().finish()
 }
 
+// TODO: Sanitize RivEffect and Trait names?
 /**
  * Endpoint for adding a RivEffect.
  */
