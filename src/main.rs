@@ -241,7 +241,7 @@ impl Enemy {
 
         let mut md = format!("---\nlayout: default\ntitle: {}\n---\n", self.name);
 
-        md.push_str(format!("# {} <a name=\"main\"></a>\n", self.name).as_str());
+        md.push_str(format!("# {} <a name=\"main\"></a>\n\n", self.name).as_str());
         // Table of contents:
         md.push_str(
             "1. [Basic information](#basics)\n\
@@ -257,18 +257,18 @@ impl Enemy {
         );
 
         if self.revealed_basics {
-            md.push_str("## Basic features <a name=\"basics\"></a>");
+            md.push_str("# Basic features <a name=\"basics\"></a>\n");
             md.push_str(format!("{}\n", self.enemy_type).as_str());
             md.push_str(format!("- **HP:** {}\n", self.hp).as_str());
             md.push_str(format!("- **AC:** {}\n", self.ac).as_str());
-            md.push_str(format!("- **Mov:** {}\n", self.mov).as_str());
+            md.push_str(format!("- **Mov:** {}\n\n", self.mov).as_str());
 
             if self.traits.len() > 0 {
-                md.push_str("### Traits <a name=\"traits\">\n");
+                md.push_str("## Traits <a name=\"traits\">\n\n");
                 for t in &self.traits {
                     md.push_str(
                         format!(
-                            "[{}](../traits/{}.html), ",
+                            "[{}](../data/traits.html#{}), ",
                             t.name,
                             t.name.to_lowercase().replace(" ", "-")
                         )
@@ -278,11 +278,11 @@ impl Enemy {
                 md.pop(); // Remove leftover space.
                 md.pop(); // Remove leftover comma.
             }
-            md.push_str("\n");
+            md.push_str("\n\n");
         }
 
         if self.revealed_attrs {
-            md.push_str("## Ability modifiers <a name=\"stats\"></a>\n");
+            md.push_str("# Ability modifiers <a name=\"stats\"></a>\n\n");
             if self.str == self.str_sav {
                 md.push_str(format!("- **STR:** {:+}\n", self.str).as_str());
             } else {
@@ -311,12 +311,12 @@ impl Enemy {
             if self.str == self.str_sav {
                 md.push_str(format!("- **CHA:** {:+}\n", self.cha).as_str());
             } else {
-                md.push_str(format!("- **CHA:** {:+} / {:+}\n", self.cha, self.cha_sav).as_str());
+                md.push_str(format!("- **CHA:** {:+} / {:+}\n\n", self.cha, self.cha_sav).as_str());
             }
         }
 
         if self.revealed_skills {
-            md.push_str("## Skills <a name=skills></a>\n");
+            md.push_str("# Skills <a name=skills></a>\n\n");
 
             for skill in &self.skills {
                 // TODO: Itemize instead of list?
@@ -332,56 +332,56 @@ impl Enemy {
             md.pop(); // Remove leftover space.
             md.pop(); // Remove leftover comma.
 
-            md.push_str("\n");
+            md.push_str("\n\n");
         }
 
         if self.revealed_riv {
-            md.push_str("## Resistances, immunities, vulnerabilities <a name=\"riv\"></a>\n");
+            md.push_str("# Resistances, immunities, vulnerabilities <a name=\"riv\"></a>\n\n");
 
             if self.resistances.len() > 0 {
-                md.push_str("### Resistances <a name=\"resistances\"></a>\n");
+                md.push_str("## Resistances <a name=\"resistances\"></a>\n\n");
                 for r in &self.resistances {
                     md.push_str(format!("{}, ", r.name).as_str());
                 }
                 md.pop(); // Remove leftover space.
                 md.pop(); // Remove leftover comma.
 
-                md.push_str("\n");
+                md.push_str("\n\n");
             }
 
             if self.immunities.len() > 0 {
-                md.push_str("### Immunities <a name=\"immunities\"></a>\n");
+                md.push_str("## Immunities <a name=\"immunities\"></a>\n\n");
                 for i in &self.immunities {
                     md.push_str(format!("{}, ", i.name).as_str());
                 }
                 md.pop(); // Remove leftover space.
                 md.pop(); // Remove leftover comma.
 
-                md.push_str("\n");
+                md.push_str("\n\n");
             }
 
             if self.vulnerabilities.len() > 0 {
-                md.push_str("### Vulnerabilities <a name=\"vulnerabilities\"></a>\n");
+                md.push_str("## Vulnerabilities <a name=\"vulnerabilities\"></a>\n\n");
                 for v in &self.vulnerabilities {
                     md.push_str(format!("{}, ", v.name).as_str());
                 }
                 md.pop(); // Remove leftover space.
                 md.pop(); // Remove leftover comma.
 
-                md.push_str("\n");
+                md.push_str("\n\n");
             }
         }
 
         if self.revealed_basics {
-            md.push_str("## Abilities <a name=\"abilities\"></a>\n");
+            md.push_str("# Abilities <a name=\"abilities\"></a>\n\n");
 
             for (tree_name, tree_map) in &self.ability_trees {
-                md.push_str(format!("### {}\n", tree_name).as_str());
+                md.push_str(format!("## {}\n\n", tree_name).as_str());
 
                 for (ability_name, (revealed, description)) in tree_map {
-                    md.push_str(format!("#### {}\n", ability_name).as_str());
+                    md.push_str(format!("### {}\n\n", ability_name).as_str());
                     if *revealed {
-                        md.push_str(format!("{}\n", description).as_str());
+                        md.push_str(format!("{}\n\n", description).as_str());
                     }
                 }
             }
@@ -389,11 +389,12 @@ impl Enemy {
 
         if self.misc.len() > 0 {
             let mut idx = 1;
-            md.push_str("## Extra notes <a name=\"misc\"></a>\n");
+            md.push_str("# Extra notes <a name=\"misc\"></a>\n\n");
             for e in &self.misc {
                 md.push_str(format!("{}. {}\n", idx, e).as_str());
                 idx += 1;
             }
+            md.push_str("\n");
         }
 
         let uri = webpage_path!(self.uri_page());
@@ -465,11 +466,12 @@ fn gen_riv_page() {
     let riv_effects = shm_acc_r!(RIV_EFFECTS);
 
     let mut md = "---\nlayout: default\ntitle: RIV effects\n---\n".to_owned();
-    md.push_str("# Resistance, immunity and vulnerability effects list\n");
+    md.push_str("# Resistance, immunity and vulnerability effects list\n\n");
 
     for effect in riv_effects.values() {
         md.push_str(format!("- {} ({})\n", effect.name, effect.category).as_str());
     }
+    md.push_str("\n");
 
     fs::write(webpage_path!("data/riv.md"), md).expect("Could not write data/riv.md.");
 }
@@ -520,7 +522,7 @@ fn gen_traits_page() {
     traits.sort_by_key(|e| e.name.clone());
 
     let mut md = "---\nlayout: default\ntitle: Trait list\n---\n".to_owned();
-    md.push_str("# Trait list\n");
+    md.push_str("# Trait list\n\n");
 
     let mut idx = 1;
     for t in &traits {
@@ -540,16 +542,16 @@ fn gen_traits_page() {
     for t in traits {
         md.push_str(
             format!(
-                "## {} <a name=\"{}\"></a>\n",
+                "## {} <a name=\"{}\"></a>\n\n",
                 t.name,
                 t.name.to_lowercase().replace(" ", "-").as_str()
             )
             .as_str(),
         );
         md.push_str(format!("- **Category:** {}\n", t.category).as_str());
-        md.push_str(format!("- **Subcategory:** {}\n", t.subcategory).as_str());
+        md.push_str(format!("- **Subcategory:** {}\n\n", t.subcategory).as_str());
         md.push_str(t.description.as_str());
-        md.push_str("\n");
+        md.push_str("\n\n");
     }
 
     fs::write(webpage_path!("data/traits.md"), md).expect("Could not write data/traits.md.");
@@ -670,13 +672,15 @@ async fn enemy_set_basics(
 
     let trait_map = shm_acc_r!(TRAITS);
     let mut traits = Vec::<Trait>::new();
-    for trait_name in &form.traits {
+    for trait_name_input in &form.traits {
+        let trait_name = trait_name_input.to_lowercase();
+
         // Check that the specified trait exists:
-        if trait_map.contains_key(trait_name) {
-            return HttpResponse::BadRequest().body(trait_name.clone());
+        if !trait_map.contains_key(&trait_name) {
+            return HttpResponse::BadRequest().body(trait_name_input.clone());
         }
 
-        traits.push(trait_map[trait_name].clone());
+        traits.push(trait_map[&trait_name].clone());
     }
     enemy.set_traits(traits);
 
@@ -755,37 +759,43 @@ async fn enemy_set_riv(path: web::Path<String>, form: web::Json<EnemyRIVForm>) -
 
     /* Set resistances: */
     let mut resistances = Vec::<RivEffect>::new();
-    for resistance_name in &form.resistances {
+    for resistance_name_input in &form.resistances {
+        let resistance_name = resistance_name_input.to_lowercase();
+
         // Check that the specified resistance exists:
-        if riv_map.contains_key(resistance_name) {
-            return HttpResponse::BadRequest().body(resistance_name.clone());
+        if !riv_map.contains_key(&resistance_name) {
+            return HttpResponse::BadRequest().body(resistance_name_input.clone());
         }
 
-        resistances.push(riv_map[resistance_name].clone());
+        resistances.push(riv_map[&resistance_name].clone());
     }
     enemy.set_resistances(resistances);
 
     /* Set immunities: */
     let mut immunities = Vec::<RivEffect>::new();
-    for immunity_name in &form.immunities {
+    for immunity_name_input in &form.immunities {
+        let immunity_name = immunity_name_input.to_lowercase();
+
         // Check that the specified immunity exists:
-        if riv_map.contains_key(immunity_name) {
-            return HttpResponse::BadRequest().body(immunity_name.clone());
+        if !riv_map.contains_key(&immunity_name) {
+            return HttpResponse::BadRequest().body(immunity_name_input.clone());
         }
 
-        immunities.push(riv_map[immunity_name].clone());
+        immunities.push(riv_map[&immunity_name].clone());
     }
     enemy.set_immunities(immunities);
 
     /* Set vulnerabilities: */
     let mut vulnerabilities = Vec::<RivEffect>::new();
-    for vulnerability_name in &form.vulnerabilities {
+    for vulnerability_name_input in &form.vulnerabilities {
+        let vulnerability_name = vulnerability_name_input.to_lowercase();
+
         // Check that the specified vulnerability exists:
-        if riv_map.contains_key(vulnerability_name) {
-            return HttpResponse::BadRequest().body(vulnerability_name.clone());
+        if !riv_map.contains_key(&vulnerability_name) {
+            return HttpResponse::BadRequest().body(vulnerability_name_input.clone());
         }
 
-        vulnerabilities.push(riv_map[vulnerability_name].clone());
+        vulnerabilities.push(riv_map[&vulnerability_name].clone());
     }
     enemy.set_vulnerabilities(vulnerabilities);
 
@@ -913,6 +923,7 @@ async fn reveal_enemy(path: web::Path<String>) -> HttpResponse {
     HttpResponse::Created().body(enemy.uri_page().replace("md", "html"))
 }
 
+// TODO: Only reveal if the enemy is revealed. Else, return not found.
 /**
  * Endpoint for revealing an enemy's information.
  */
@@ -969,6 +980,9 @@ async fn reveal_enemy_ability(
 
     enemy.reveal_ability(tree, ability);
 
+    enemy.save();
+    enemy.generate_markdown();
+
     HttpResponse::Ok().finish()
 }
 
@@ -1013,7 +1027,9 @@ async fn add_trait(form: web::Json<Trait>) -> HttpResponse {
 async fn main() -> std::io::Result<()> {
     // Initialize global maps:
     populate_traits();
+    gen_traits_page();
     populate_riv_effects();
+    gen_riv_page();
 
     println!("Necronomicon listening on 127.0.0.1:8080");
 
@@ -1033,8 +1049,9 @@ async fn main() -> std::io::Result<()> {
                     .service(enemy_add_note)
                     .service(enemy_del_note)
                     .service(reveal_enemy)
-                    .service(reveal_enemy_info)
-                    .service(reveal_enemy_ability),
+                    .service(reveal_enemy_ability) // This must come before reveal_enemy_info
+                                                   // because their paths overlap.
+                    .service(reveal_enemy_info),
             )
             .service(add_riv_effect)
             .service(add_trait)
