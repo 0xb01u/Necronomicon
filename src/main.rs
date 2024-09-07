@@ -16,10 +16,12 @@
  *  You should have received a copy of the GNU Affero General Public License
  *  along with this program. If not, see <https://www.gnu.org/licenses/>.
  */
+use std::cmp;
 use std::collections::HashMap;
 use std::fs;
 use std::path::Path;
 use std::sync::{LazyLock, RwLock};
+extern crate reqwest;
 
 use actix_web::{delete, get, post, web, App, HttpResponse, HttpServer};
 use getset::{Getters, Setters};
@@ -117,6 +119,8 @@ struct Enemy {
 
     #[getset(get)]
     misc: Vec<String>,
+
+    img_extension: String,
 }
 
 impl Enemy {
@@ -193,31 +197,31 @@ impl Enemy {
      * Return the URI of this enemy's page.
      */
     fn uri_page(&self) -> String {
-        "enemies/".to_owned() + &self.name.to_lowercase().replace(" ", "_") + ".md"
+        "enemies/".to_owned() + Self::get_id(&self.name).as_str() + ".md"
+    }
+
+    /**
+     * Return the URI of this enemy's image.
+     */
+    fn uri_image(&self) -> String {
+        "enemies/images/".to_owned()
+            + Self::get_id(&self.name).as_str()
+            + self.img_extension.as_str()
     }
 
     /**
      * Return the URI of this enemy's data.
      */
     fn uri_data(&self) -> String {
-        "data/enemies/".to_owned() + &self.name.to_lowercase().replace(" ", "_") + ".json"
+        "data/enemies/".to_owned() + Self::get_id(&self.name).as_str() + ".json"
     }
 
     /**
-     * Return the generic URI for this enemy, based on its name.
-     * Used to constuct other URIs.
+     * Return a path-friendly identifier for the enemy, based on its name.
+     * Used to constuct URIs.
      */
-    fn uri_generic(name: &String) -> String {
+    fn get_id(name: &String) -> String {
         name.to_lowercase().replace(" ", "_")
-    }
-
-    /**
-     * Return the URI of the page for the enemy with the corresponding name.
-     * Used to serve certain GET petitions.
-     * (The actual enemy page might not exist.)
-     */
-    fn to_uri_page(name: &String) -> String {
-        "enemies/".to_owned() + &name.to_lowercase().replace(" ", "_") + ".md"
     }
 
     /**
@@ -226,7 +230,7 @@ impl Enemy {
      * (The actual enemy data might not exist.)
      */
     fn to_uri_data(name: &String) -> String {
-        "data/enemies/".to_owned() + &name.to_lowercase().replace(" ", "_") + ".json"
+        "data/enemies/".to_owned() + Self::get_id(name).as_str() + ".json"
     }
 
     /**
@@ -242,6 +246,14 @@ impl Enemy {
         let mut md = format!("---\nlayout: default\ntitle: {}\n---\n", self.name);
 
         md.push_str(format!("# {} <a name=\"main\"></a>\n\n", self.name).as_str());
+
+        // Image, if exists:
+        if !Path::new(&self.uri_image()).exists() {
+            md.push_str(
+                format!("![{}'s picture.](../{})\n\n", self.name, self.uri_image()).as_str(),
+            );
+        }
+
         // Table of contents:
         md.push_str(
             "1. [Basic information](#basics)\n\
@@ -249,19 +261,15 @@ impl Enemy {
              2. [Ability modifiers](#stats)\n\
              2. [Skills](#skills)\n\
              4. [Resistances, immunities, vulnerabilities](#riv)\n\
-             \t1. [Resistances](#resistances)\n\
-             \t2. [Immunities](#immunities)\n\
-             \t3. [Vulnerabilities](#vulnerabilities)\n\
              5. [Abilities](#abilities)\n\
              6. [Extra notes](#misc)\n\n",
         );
 
         if self.revealed_basics {
             md.push_str("# Basic features <a name=\"basics\"></a>\n");
-            md.push_str(format!("{}\n", self.enemy_type).as_str());
-            md.push_str(format!("- **HP:** {}\n", self.hp).as_str());
-            md.push_str(format!("- **AC:** {}\n", self.ac).as_str());
-            md.push_str(format!("- **Mov:** {}\n\n", self.mov).as_str());
+            md.push_str(format!("{}\n\n", self.enemy_type).as_str());
+            md.push_str("|Health Points|Armor Class|Movement Speed|\n|:-:|:-:|:-:|\n");
+            md.push_str(format!("|{}|{}|{} ft|\n\n", self.hp, self.ac, self.mov).as_str());
 
             if self.traits.len() > 0 {
                 md.push_str("## Traits <a name=\"traits\">\n\n");
@@ -278,7 +286,7 @@ impl Enemy {
                 md.pop(); // Remove leftover space.
                 md.pop(); // Remove leftover comma.
             }
-            md.push_str("\n\n");
+            md.push_str(".\n\n");
         }
 
         if self.revealed_attrs {
@@ -338,38 +346,27 @@ impl Enemy {
         if self.revealed_riv {
             md.push_str("# Resistances, immunities, vulnerabilities <a name=\"riv\"></a>\n\n");
 
-            if self.resistances.len() > 0 {
-                md.push_str("## Resistances <a name=\"resistances\"></a>\n\n");
-                for r in &self.resistances {
-                    md.push_str(format!("{}, ", r.name).as_str());
+            let row_amount = cmp::max(
+                self.resistances.len(),
+                cmp::max(self.immunities.len(), self.vulnerabilities.len()),
+            );
+            md.push_str("|Resistances|Immunities|Vulnerabilities|\n|:-:|:-:|:-:|\n");
+            for i in 0..row_amount {
+                md.push_str("|");
+                if self.resistances.len() > i {
+                    md.push_str(format!("{}", self.resistances[i].name).as_str());
                 }
-                md.pop(); // Remove leftover space.
-                md.pop(); // Remove leftover comma.
-
-                md.push_str("\n\n");
-            }
-
-            if self.immunities.len() > 0 {
-                md.push_str("## Immunities <a name=\"immunities\"></a>\n\n");
-                for i in &self.immunities {
-                    md.push_str(format!("{}, ", i.name).as_str());
+                md.push_str("|");
+                if self.immunities.len() > i {
+                    md.push_str(format!("{}", self.immunities[i].name).as_str());
                 }
-                md.pop(); // Remove leftover space.
-                md.pop(); // Remove leftover comma.
-
-                md.push_str("\n\n");
-            }
-
-            if self.vulnerabilities.len() > 0 {
-                md.push_str("## Vulnerabilities <a name=\"vulnerabilities\"></a>\n\n");
-                for v in &self.vulnerabilities {
-                    md.push_str(format!("{}, ", v.name).as_str());
+                md.push_str("|");
+                if self.vulnerabilities.len() > i {
+                    md.push_str(format!("{}", self.vulnerabilities[i].name).as_str());
                 }
-                md.pop(); // Remove leftover space.
-                md.pop(); // Remove leftover comma.
-
-                md.push_str("\n\n");
+                md.push_str("|\n");
             }
+            md.push_str("\n");
         }
 
         if self.revealed_basics {
@@ -578,6 +575,7 @@ struct EnemyBasicsForm {
     traits: Vec<String>,
 }
 
+#[cfg_attr(debug_assertions, derive(Debug))]
 #[derive(Deserialize)]
 struct EnemyAttributesForm {
     str: u8,
@@ -594,6 +592,7 @@ struct EnemyAttributesForm {
     cha_sav: u8,
 }
 
+#[cfg_attr(debug_assertions, derive(Debug))]
 #[derive(Deserialize)]
 struct EnemyRIVForm {
     resistances: Vec<String>,
@@ -601,6 +600,7 @@ struct EnemyRIVForm {
     vulnerabilities: Vec<String>,
 }
 
+#[cfg_attr(debug_assertions, derive(Debug))]
 #[derive(Deserialize)]
 struct EnemyAbilityForm {
     tree: String,
@@ -903,6 +903,51 @@ async fn enemy_del_note(path: web::Path<String>, form: web::Json<usize>) -> Http
 }
 
 /**
+ * Endpoint for setting the image for an enemy.
+ */
+#[post("/{enemy}/image")]
+async fn enemy_set_image(path: web::Path<String>, form: web::Json<String>) -> HttpResponse {
+    let data_path = Enemy::to_uri_data(&path.into_inner());
+
+    if !Path::new(&data_path).exists() {
+        return HttpResponse::NotFound().finish();
+    }
+
+    let mut enemy = Enemy::load(data_path);
+
+    let enemy_img_path = enemy.uri_image();
+    let image_url = form.into_inner();
+
+    let extension = image_url
+        .split('.')
+        .next_back()
+        .unwrap() // Should not give an error.
+        .split('?') // Trim extra URL data.
+        .next()
+        .unwrap(); // Should not give an error.
+    match extension {
+        "jpg" | "jpeg" | "png" => {
+            // Save image to file:
+            let mut out = std::fs::File::create(webpage_path!(&enemy_img_path))
+                .expect(format!("Could not create file {}.", &enemy_img_path).as_str());
+            reqwest::blocking::get(&image_url)
+                .expect(format!("Could not download {}'s image.", enemy.name).as_str())
+                .copy_to(&mut out)
+                .expect(format!("Could not save file {}.", &enemy_img_path).as_str());
+            enemy.img_extension = ".".to_string() + extension;
+        }
+        _ => {
+            return HttpResponse::BadRequest().body("Unknown image type");
+        }
+    };
+
+    enemy.save();
+    enemy.generate_markdown();
+
+    HttpResponse::Ok().finish()
+}
+
+/**
  * Endpoint for revealing an enemy.
  */
 #[post("/{enemy}/reveal")]
@@ -1031,9 +1076,8 @@ async fn main() -> std::io::Result<()> {
     populate_riv_effects();
     gen_riv_page();
 
-    println!("Necronomicon listening on 127.0.0.1:8080");
-
     // Create and run server:
+    println!("Necronomicon listening on 127.0.0.1:8080");
     HttpServer::new(|| {
         App::new()
             .service(
@@ -1048,9 +1092,10 @@ async fn main() -> std::io::Result<()> {
                     .service(enemy_add_ability)
                     .service(enemy_add_note)
                     .service(enemy_del_note)
+                    .service(enemy_set_image)
                     .service(reveal_enemy)
                     .service(reveal_enemy_ability) // This must come before reveal_enemy_info
-                                                   // because their paths overlap.
+                    // because their paths overlap.
                     .service(reveal_enemy_info),
             )
             .service(add_riv_effect)
