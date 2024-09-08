@@ -316,8 +316,8 @@ impl Enemy {
             } else {
                 md.push_str(format!("- **WIS:** {:+} / {:+}\n", self.wis, self.wis_sav).as_str());
             }
-            if self.str == self.str_sav {
-                md.push_str(format!("- **CHA:** {:+}\n", self.cha).as_str());
+            if self.cha == self.cha_sav {
+                md.push_str(format!("- **CHA:** {:+}\n\n", self.cha).as_str());
             } else {
                 md.push_str(format!("- **CHA:** {:+} / {:+}\n\n", self.cha, self.cha_sav).as_str());
             }
@@ -712,12 +712,12 @@ async fn enemy_set_attrs(
     enemy.set_wis(form.wis);
     enemy.set_cha(form.cha);
 
-    enemy.set_str(form.str_sav);
-    enemy.set_dex(form.dex_sav);
-    enemy.set_con(form.con_sav);
-    enemy.set_int(form.int_sav);
-    enemy.set_wis(form.wis_sav);
-    enemy.set_cha(form.cha_sav);
+    enemy.set_str_sav(form.str_sav);
+    enemy.set_dex_sav(form.dex_sav);
+    enemy.set_con_sav(form.con_sav);
+    enemy.set_int_sav(form.int_sav);
+    enemy.set_wis_sav(form.wis_sav);
+    enemy.set_cha_sav(form.cha_sav);
 
     enemy.save();
 
