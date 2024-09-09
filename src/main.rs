@@ -245,7 +245,7 @@ impl Enemy {
 
         let mut md = format!("---\nlayout: default\ntitle: {}\n---\n", self.name);
 
-        md.push_str(format!("# {} <a name=\"main\"></a>\n\n", self.name).as_str());
+        md.push_str(format!("# {} <a id=\"main\"></a>\n\n", self.name).as_str());
 
         // Image, if exists:
         if !Path::new(&self.uri_image()).exists() {
@@ -266,13 +266,13 @@ impl Enemy {
         );
 
         if self.revealed_basics {
-            md.push_str("# Basic features <a name=\"basics\"></a>\n");
-            md.push_str(format!("{}\n\n", self.enemy_type).as_str());
+            md.push_str("# Basic features <a id=\"basics\"></a>\n");
+            md.push_str(format!("{}.\n\n", self.enemy_type).as_str());
             md.push_str("|Health Points|Armor Class|Movement Speed|\n|:-:|:-:|:-:|\n");
             md.push_str(format!("|{}|{}|{} ft|\n\n", self.hp, self.ac, self.mov).as_str());
 
             if self.traits.len() > 0 {
-                md.push_str("## Traits <a name=\"traits\">\n\n");
+                md.push_str("## Traits <a id=\"traits\"></a>\n\n");
                 for t in &self.traits {
                     md.push_str(
                         format!(
@@ -290,41 +290,33 @@ impl Enemy {
         }
 
         if self.revealed_attrs {
-            md.push_str("# Ability modifiers <a name=\"stats\"></a>\n\n");
-            if self.str == self.str_sav {
-                md.push_str(format!("- **STR:** {:+}\n", self.str).as_str());
-            } else {
-                md.push_str(format!("- **STR:** {:+} / {:+}\n", self.str, self.str_sav).as_str());
-            }
-            if self.dex == self.dex_sav {
-                md.push_str(format!("- **DEX:** {:+}\n", self.dex).as_str());
-            } else {
-                md.push_str(format!("- **DEX:** {:+} / {:+}\n", self.dex, self.dex_sav).as_str());
-            }
-            if self.con == self.con_sav {
-                md.push_str(format!("- **CON:** {:+}\n", self.con).as_str());
-            } else {
-                md.push_str(format!("- **CON:** {:+} / {:+}\n", self.con, self.con_sav).as_str());
-            }
-            if self.int == self.int_sav {
-                md.push_str(format!("- **INT:** {:+}\n", self.int).as_str());
-            } else {
-                md.push_str(format!("- **INT:** {:+} / {:+}\n", self.int, self.int_sav).as_str());
-            }
-            if self.wis == self.wis_sav {
-                md.push_str(format!("- **WIS:** {:+}\n", self.wis).as_str());
-            } else {
-                md.push_str(format!("- **WIS:** {:+} / {:+}\n", self.wis, self.wis_sav).as_str());
-            }
-            if self.cha == self.cha_sav {
-                md.push_str(format!("- **CHA:** {:+}\n\n", self.cha).as_str());
-            } else {
-                md.push_str(format!("- **CHA:** {:+} / {:+}\n\n", self.cha, self.cha_sav).as_str());
-            }
+            md.push_str("# Ability modifiers <a id=\"stats\"></a>\n\n");
+
+            md.push_str("|Strength|Dexterity|Constitution|Intelligence|Wisdome|Charisma|\n");
+            md.push_str("|:-:|:-:|:-:|:-:|:-:|:-:|\n");
+            md.push_str(
+                format!(
+                    "|{:+}|{:+}|{:+}|{:+}|{:+}|{:+}|\n",
+                    self.str, self.dex, self.con, self.int, self.wis, self.cha
+                )
+                .as_str(),
+            );
+            md.push_str(
+                format!(
+                    "|{:+}|{:+}|{:+}|{:+}|{:+}|{:+}|\n\n",
+                    self.str_sav,
+                    self.dex_sav,
+                    self.con_sav,
+                    self.int_sav,
+                    self.wis_sav,
+                    self.cha_sav
+                )
+                .as_str(),
+            );
         }
 
         if self.revealed_skills {
-            md.push_str("# Skills <a name=skills></a>\n\n");
+            md.push_str("# Skills <a id=skills></a>\n\n");
 
             for skill in &self.skills {
                 // TODO: Itemize instead of list?
@@ -344,7 +336,7 @@ impl Enemy {
         }
 
         if self.revealed_riv {
-            md.push_str("# Resistances, immunities, vulnerabilities <a name=\"riv\"></a>\n\n");
+            md.push_str("# Resistances, immunities, vulnerabilities <a id=\"riv\"></a>\n\n");
 
             let row_amount = cmp::max(
                 self.resistances.len(),
@@ -370,15 +362,17 @@ impl Enemy {
         }
 
         if self.revealed_basics {
-            md.push_str("# Abilities <a name=\"abilities\"></a>\n\n");
+            md.push_str("# Abilities <a id=\"abilities\"></a>\n\n");
 
             for (tree_name, tree_map) in &self.ability_trees {
                 md.push_str(format!("## {}\n\n", tree_name).as_str());
 
                 for (ability_name, (revealed, description)) in tree_map {
-                    md.push_str(format!("### {}\n\n", ability_name).as_str());
                     if *revealed {
+                        md.push_str(format!("### {}\n\n", ability_name).as_str());
                         md.push_str(format!("{}\n\n", description).as_str());
+                    } else {
+                        md.push_str(format!("### _{}_\n\n", ability_name).as_str());
                     }
                 }
             }
@@ -386,7 +380,7 @@ impl Enemy {
 
         if self.misc.len() > 0 {
             let mut idx = 1;
-            md.push_str("# Extra notes <a name=\"misc\"></a>\n\n");
+            md.push_str("# Extra notes <a id=\"misc\"></a>\n\n");
             for e in &self.misc {
                 md.push_str(format!("{}. {}\n", idx, e).as_str());
                 idx += 1;
@@ -539,7 +533,7 @@ fn gen_traits_page() {
     for t in traits {
         md.push_str(
             format!(
-                "## {} <a name=\"{}\"></a>\n\n",
+                "## {} <a id=\"{}\"></a>\n\n",
                 t.name,
                 t.name.to_lowercase().replace(" ", "-").as_str()
             )
@@ -640,9 +634,8 @@ async fn retrieve_enemy(form: web::Json<String>) -> HttpResponse {
     }
 
     let enemy = Enemy::load(data_path);
-
     if !enemy.revealed {
-        // Return NotFound here too, to not leak unrevealed enemies.
+        // Return NotFound here too, not to leak unrevealed enemies.
         return HttpResponse::NotFound().finish();
     }
 
@@ -982,6 +975,10 @@ async fn reveal_enemy_info(path: web::Path<(String, String)>) -> HttpResponse {
     }
 
     let mut enemy = Enemy::load(data_path);
+    if !enemy.revealed {
+        // Return NotFound here too, not to leak unrevealed enemies.
+        return HttpResponse::NotFound().finish();
+    }
 
     match info.as_str() {
         "basics" => enemy.set_revealed_basics(true),
@@ -1012,6 +1009,10 @@ async fn reveal_enemy_ability(
     }
 
     let mut enemy = Enemy::load(data_path);
+    if !enemy.revealed {
+        // Return NotFound here too, not to leak unrevealed enemies.
+        return HttpResponse::NotFound().finish();
+    }
 
     let tree = &form.tree;
     if !enemy.ability_trees().contains_key(tree) {
@@ -1026,6 +1027,28 @@ async fn reveal_enemy_ability(
     enemy.reveal_ability(tree, ability);
 
     enemy.save();
+    enemy.generate_markdown();
+
+    HttpResponse::Ok().finish()
+}
+
+/**
+ * Endpoint for refreshing (regenerate) an enemy's page.
+ */
+#[post("/{enemy}/refresh")]
+async fn refresh_enemy_page(path: web::Path<String>) -> HttpResponse {
+    let data_path = Enemy::to_uri_data(&path.into_inner());
+
+    if !Path::new(&data_path).exists() {
+        return HttpResponse::NotFound().finish();
+    }
+
+    let enemy = Enemy::load(data_path);
+    if !enemy.revealed {
+        // Return NotFound here too, not to leak unrevealed enemies.
+        return HttpResponse::NotFound().finish();
+    }
+
     enemy.generate_markdown();
 
     HttpResponse::Ok().finish()
@@ -1096,7 +1119,8 @@ async fn main() -> std::io::Result<()> {
                     .service(reveal_enemy)
                     .service(reveal_enemy_ability) // This must come before reveal_enemy_info
                     // because their paths overlap.
-                    .service(reveal_enemy_info),
+                    .service(reveal_enemy_info)
+                    .service(refresh_enemy_page),
             )
             .service(add_riv_effect)
             .service(add_trait)
