@@ -292,7 +292,7 @@ impl Enemy {
         if self.revealed_attrs {
             md.push_str("# Ability modifiers <a id=\"stats\"></a>\n\n");
 
-            md.push_str("|Strength|Dexterity|Constitution|Intelligence|Wisdome|Charisma|\n");
+            md.push_str("|Strength|Dexterity|Constitution|Intelligence|Wisdom|Charisma|\n");
             md.push_str("|:-:|:-:|:-:|:-:|:-:|:-:|\n");
             md.push_str(
                 format!(
