@@ -130,8 +130,9 @@ impl Enemy {
         enemy
     }
 
-    // TODO: change `expects` for proper error propagation.
-    // Objective: notify end user of errors.
+    // Maybe, proper error propagation should be used instead of .expect()s.
+    // However, the logic would get considerably more complicated, and the benefits in this case
+    // would be minimal.
 
     fn add_ability_tree(&mut self, tree_name: String) {
         self.ability_trees.insert(tree_name, HashMap::new());
@@ -319,7 +320,6 @@ impl Enemy {
             md.push_str("# Skills <a id=skills></a>\n\n");
 
             for skill in &self.skills {
-                // TODO: Itemize instead of list?
                 md.push_str(
                     format!(
                         "[{}](../skills/{}.html), ",
@@ -612,7 +612,6 @@ async fn create_enemy(form: web::Json<String>) -> HttpResponse {
     let name = form.into_inner();
 
     if Path::new(&Enemy::to_uri_data(&name)).exists() {
-        // TODO: What to do with data leaks here?
         return HttpResponse::Forbidden().finish();
     }
 
@@ -635,8 +634,8 @@ async fn retrieve_enemy(form: web::Json<String>) -> HttpResponse {
 
     let enemy = Enemy::load(data_path);
     if !enemy.revealed {
-        // Return NotFound here too, not to leak unrevealed enemies.
-        return HttpResponse::NotFound().finish();
+        // Enemy not revealed yet, return Forbidden:
+        return HttpResponse::Forbidden().finish();
     }
 
     HttpResponse::Ok().body(enemy.uri_page().replace("md", "html"))
@@ -974,10 +973,6 @@ async fn reveal_enemy_info(path: web::Path<(String, String)>) -> HttpResponse {
     }
 
     let mut enemy = Enemy::load(data_path);
-    if !enemy.revealed {
-        // Return NotFound here too, not to leak unrevealed enemies.
-        return HttpResponse::NotFound().finish();
-    }
 
     match info.as_str() {
         "basics" => enemy.set_revealed_basics(true),
@@ -1008,10 +1003,6 @@ async fn reveal_enemy_ability(
     }
 
     let mut enemy = Enemy::load(data_path);
-    if !enemy.revealed {
-        // Return NotFound here too, not to leak unrevealed enemies.
-        return HttpResponse::NotFound().finish();
-    }
 
     let tree = &form.tree;
     if !enemy.ability_trees().contains_key(tree) {
@@ -1043,10 +1034,6 @@ async fn refresh_enemy_page(path: web::Path<String>) -> HttpResponse {
     }
 
     let enemy = Enemy::load(data_path);
-    if !enemy.revealed {
-        // Return NotFound here too, not to leak unrevealed enemies.
-        return HttpResponse::NotFound().finish();
-    }
 
     enemy.generate_markdown();
 
