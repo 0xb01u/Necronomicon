@@ -919,7 +919,7 @@ async fn enemy_set_image(path: web::Path<String>, form: web::Json<String>) -> Ht
         .next()
         .unwrap(); // Should not give an error.
     match extension {
-        "jpg" | "jpeg" | "png" => {
+        "bmp" | "png" | "jpeg" | "jpg" | "avif" => {
             // Save image to file:
             let mut out = std::fs::File::create(webpage_path!(&enemy_img_path))
                 .expect(format!("Could not create file {}.", &enemy_img_path).as_str());
@@ -961,7 +961,6 @@ async fn reveal_enemy(path: web::Path<String>) -> HttpResponse {
     HttpResponse::Created().body(enemy.uri_page().replace("md", "html"))
 }
 
-// TODO: Only reveal if the enemy is revealed. Else, return not found.
 /**
  * Endpoint for revealing an enemy's information.
  */
