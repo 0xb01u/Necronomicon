@@ -293,18 +293,18 @@ impl Enemy {
         if self.revealed_attrs {
             md.push_str("# Ability modifiers <a id=\"stats\"></a>\n\n");
 
-            md.push_str("|Strength|Dexterity|Constitution|Intelligence|Wisdom|Charisma|\n");
-            md.push_str("|:-:|:-:|:-:|:-:|:-:|:-:|\n");
+            md.push_str("||Strength|Dexterity|Constitution|Intelligence|Wisdom|Charisma|\n");
+            md.push_str("|-:|:-:|:-:|:-:|:-:|:-:|:-:|\n");
             md.push_str(
                 format!(
-                    "|{:+}|{:+}|{:+}|{:+}|{:+}|{:+}|\n",
+                    "|**Regular**|{:+}|{:+}|{:+}|{:+}|{:+}|{:+}|\n",
                     self.str, self.dex, self.con, self.int, self.wis, self.cha
                 )
                 .as_str(),
             );
             md.push_str(
                 format!(
-                    "|{:+}|{:+}|{:+}|{:+}|{:+}|{:+}|\n\n",
+                    "|**Saving**|{:+}|{:+}|{:+}|{:+}|{:+}|{:+}|\n\n",
                     self.str_sav,
                     self.dex_sav,
                     self.con_sav,
