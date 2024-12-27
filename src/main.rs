@@ -248,13 +248,6 @@ impl Enemy {
 
         md.push_str(format!("# {} <a id=\"main\"></a>\n\n", self.name).as_str());
 
-        // Image, if exists:
-        if !Path::new(&self.uri_image()).exists() {
-            md.push_str(
-                format!("![{}'s picture.](../{})\n\n", self.name, self.uri_image()).as_str(),
-            );
-        }
-
         // Table of contents:
         md.push_str(
             "1. [Basic information](#basics)\n\
@@ -265,6 +258,13 @@ impl Enemy {
              5. [Abilities](#abilities)\n\
              6. [Extra notes](#misc)\n\n",
         );
+
+        // Image, if exists:
+        if Path::new(&webpage_path!(self.uri_image())).exists() {
+            md.push_str(
+                format!("![{}'s picture.](../{})\n\n", self.name, self.uri_image()).as_str(),
+            );
+        }
 
         if self.revealed_basics {
             md.push_str("# Basic features <a id=\"basics\"></a>\n");
@@ -364,6 +364,7 @@ impl Enemy {
         if self.revealed_basics {
             md.push_str("# Abilities <a id=\"abilities\"></a>\n\n");
 
+            // TODO: Sort somehow, maybe alphabetically.
             for (tree_name, tree_map) in &self.ability_trees {
                 md.push_str(format!("## {}\n\n", tree_name).as_str());
 
@@ -754,6 +755,11 @@ async fn enemy_set_riv(path: web::Path<String>, form: web::Json<EnemyRIVForm>) -
     for resistance_name_input in &form.resistances {
         let resistance_name = resistance_name_input.to_lowercase();
 
+        // Check for wildcard "None" to specify no resistances:
+        if form.resistances.len() == 1 && resistance_name == "none" {
+            break;
+        }
+
         // Check that the specified resistance exists:
         if !riv_map.contains_key(&resistance_name) {
             return HttpResponse::BadRequest().body(resistance_name_input.clone());
@@ -768,6 +774,11 @@ async fn enemy_set_riv(path: web::Path<String>, form: web::Json<EnemyRIVForm>) -
     for immunity_name_input in &form.immunities {
         let immunity_name = immunity_name_input.to_lowercase();
 
+        // Check for wildcard "None" to specify no resistances:
+        if form.immunities.len() == 1 && immunity_name == "none" {
+            break;
+        }
+
         // Check that the specified immunity exists:
         if !riv_map.contains_key(&immunity_name) {
             return HttpResponse::BadRequest().body(immunity_name_input.clone());
@@ -781,6 +792,11 @@ async fn enemy_set_riv(path: web::Path<String>, form: web::Json<EnemyRIVForm>) -
     let mut vulnerabilities = Vec::<RivEffect>::new();
     for vulnerability_name_input in &form.vulnerabilities {
         let vulnerability_name = vulnerability_name_input.to_lowercase();
+
+        // Check for wildcard "None" to specify no resistances:
+        if form.vulnerabilities.len() == 1 && vulnerability_name == "none" {
+            break;
+        }
 
         // Check that the specified vulnerability exists:
         if !riv_map.contains_key(&vulnerability_name) {
@@ -907,7 +923,6 @@ async fn enemy_set_image(path: web::Path<String>, form: web::Json<String>) -> Ht
 
     let mut enemy = Enemy::load(data_path);
 
-    let enemy_img_path = enemy.uri_image();
     let image_url = form.into_inner();
 
     let extension = image_url
@@ -920,13 +935,14 @@ async fn enemy_set_image(path: web::Path<String>, form: web::Json<String>) -> Ht
     match extension {
         "bmp" | "png" | "jpeg" | "jpg" | "avif" => {
             // Save image to file:
+            enemy.img_extension = ".".to_string() + extension;
+            let enemy_img_path = enemy.uri_image();
             let mut out = std::fs::File::create(webpage_path!(&enemy_img_path))
                 .expect(format!("Could not create file {}.", &enemy_img_path).as_str());
             reqwest::blocking::get(&image_url)
                 .expect(format!("Could not download {}'s image.", enemy.name).as_str())
                 .copy_to(&mut out)
                 .expect(format!("Could not save file {}.", &enemy_img_path).as_str());
-            enemy.img_extension = ".".to_string() + extension;
         }
         _ => {
             return HttpResponse::BadRequest().body("Unknown image type");
