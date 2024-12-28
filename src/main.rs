@@ -17,7 +17,7 @@
  *  along with this program. If not, see <https://www.gnu.org/licenses/>.
  */
 use std::cmp;
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 use std::fs;
 use std::path::Path;
 use std::sync::{LazyLock, RwLock};
@@ -115,7 +115,7 @@ struct Enemy {
     revealed_riv: bool,
 
     #[getset(get)]
-    ability_trees: HashMap<String, HashMap<String, (bool, String)>>,
+    ability_trees: BTreeMap<String, BTreeMap<String, (bool, String)>>,
 
     #[getset(get)]
     misc: Vec<String>,
@@ -135,7 +135,7 @@ impl Enemy {
     // would be minimal.
 
     fn add_ability_tree(&mut self, tree_name: String) {
-        self.ability_trees.insert(tree_name, HashMap::new());
+        self.ability_trees.insert(tree_name, BTreeMap::new());
     }
 
     fn add_ability(&mut self, tree_name: &String, name: String, description: String) {
@@ -250,14 +250,22 @@ impl Enemy {
 
         // Table of contents:
         md.push_str(
-            "1. [Basic information](#basics)\n\
-             \t1. [Traits](#traits)\n\
+            "1. [Basic information](#basics) 1.1. [Traits](#traits)\n\
              2. [Ability modifiers](#stats)\n\
              2. [Skills](#skills)\n\
              4. [Resistances, immunities, vulnerabilities](#riv)\n\
-             5. [Abilities](#abilities)\n\
-             6. [Extra notes](#misc)\n\n",
+             5. [Abilities](#abilities)",
         );
+        if self.revealed_basics {
+            let mut i = 1;
+            for (tree_name, _) in &self.ability_trees {
+                md.push_str(
+                    format!(" 5.{}. [{}](#{})\n", i, tree_name, tree_name.to_lowercase()).as_str(),
+                );
+                i += 1;
+            }
+        }
+        md.push_str("6. [Extra notes](#misc)\n\n");
 
         // Image, if exists:
         if Path::new(&webpage_path!(self.uri_image())).exists() {
@@ -364,9 +372,15 @@ impl Enemy {
         if self.revealed_basics {
             md.push_str("# Abilities <a id=\"abilities\"></a>\n\n");
 
-            // TODO: Sort somehow, maybe alphabetically.
             for (tree_name, tree_map) in &self.ability_trees {
-                md.push_str(format!("## {}\n\n", tree_name).as_str());
+                md.push_str(
+                    format!(
+                        "## {} <a id=\"{}\"></a>\n\n",
+                        tree_name,
+                        tree_name.to_lowercase()
+                    )
+                    .as_str(),
+                );
 
                 for (ability_name, (revealed, description)) in tree_map {
                     if *revealed {
@@ -407,7 +421,7 @@ static TRAITS: LazyLock<RwLock<HashMap<String, Trait>>> =
 /* Macros and functions to manage global maps: */
 
 /**
- * Macro to conveniently access a (global)static HashMap (a.k.a. "shm") for reading.
+ * Macro to conveniently access a (global) static HashMap (a.k.a. "shm") for reading.
  */
 #[macro_export]
 macro_rules! shm_acc_r {
