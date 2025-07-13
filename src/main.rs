@@ -16,16 +16,16 @@
  *  You should have received a copy of the GNU Affero General Public License
  *  along with this program. If not, see <https://www.gnu.org/licenses/>.
  */
-use std::cmp;
-use std::collections::{BTreeMap, HashMap};
-use std::fs;
-use std::path::Path;
-use std::sync::{LazyLock, RwLock};
-extern crate reqwest;
-
 use actix_web::{delete, get, post, web, App, HttpResponse, HttpServer};
 use getset::{Getters, Setters};
 use serde::{Deserialize, Serialize};
+use std::{
+    cmp,
+    collections::{BTreeMap, HashMap},
+    fs,
+    path::Path,
+    sync::{LazyLock, RwLock},
+};
 
 /* Macro to generate the correct target saving location for web pages. */
 #[macro_export]
@@ -198,7 +198,7 @@ impl Enemy {
      * Return the URI of this enemy's page.
      */
     fn uri_page(&self) -> String {
-        "enemies/".to_owned() + Self::get_id(&self.name).as_str() + ".md"
+        "enemies/".to_owned() + Self::sanitize_name(&self.name).as_str() + ".md"
     }
 
     /**
@@ -206,7 +206,7 @@ impl Enemy {
      */
     fn uri_image(&self) -> String {
         "enemies/images/".to_owned()
-            + Self::get_id(&self.name).as_str()
+            + Self::sanitize_name(&self.name).as_str()
             + self.img_extension.as_str()
     }
 
@@ -214,15 +214,15 @@ impl Enemy {
      * Return the URI of this enemy's data.
      */
     fn uri_data(&self) -> String {
-        "data/enemies/".to_owned() + Self::get_id(&self.name).as_str() + ".json"
+        "data/enemies/".to_owned() + Self::sanitize_name(&self.name).as_str() + ".json"
     }
 
     /**
      * Return a path-friendly identifier for the enemy, based on its name.
      * Used to constuct URIs.
      */
-    fn get_id(name: &String) -> String {
-        name.to_lowercase().replace(" ", "_")
+    fn sanitize_name(name: &String) -> String {
+        name.to_lowercase().replace(" ", "_").replace(",", "")
     }
 
     /**
@@ -231,7 +231,7 @@ impl Enemy {
      * (The actual enemy data might not exist.)
      */
     fn to_uri_data(name: &String) -> String {
-        "data/enemies/".to_owned() + Self::get_id(name).as_str() + ".json"
+        "data/enemies/".to_owned() + Self::sanitize_name(name).as_str() + ".json"
     }
 
     /**
@@ -254,15 +254,19 @@ impl Enemy {
              2. [Ability modifiers](#stats)\n\
              2. [Skills](#skills)\n\
              4. [Resistances, immunities, vulnerabilities](#riv)\n\
-             5. [Abilities](#abilities)",
+             5. [Abilities](#abilities)\n",
         );
         if self.revealed_basics {
-            let mut i = 1;
-            for (tree_name, _) in &self.ability_trees {
+            for (i, (tree_name, _)) in self.ability_trees.iter().enumerate() {
                 md.push_str(
-                    format!(" 5.{}. [{}](#{})\n", i, tree_name, tree_name.to_lowercase()).as_str(),
+                    format!(
+                        " 5.{}. [{}](#{})\n",
+                        i + 1,
+                        tree_name,
+                        tree_name.to_lowercase()
+                    )
+                    .as_str(),
                 );
-                i += 1;
             }
         }
         md.push_str("6. [Extra notes](#misc)\n\n");
@@ -330,9 +334,10 @@ impl Enemy {
             for skill in &self.skills {
                 md.push_str(
                     format!(
-                        "[{}](../skills/{}.html), ",
+                        //"[{}](../skills/{}.html), ",
+                        "{}, ",
                         skill,
-                        skill.to_lowercase().replace(" ", "-")
+                        //skill.to_lowercase().replace(" ", "-")
                     )
                     .as_str(),
                 );
@@ -340,7 +345,7 @@ impl Enemy {
             md.pop(); // Remove leftover space.
             md.pop(); // Remove leftover comma.
 
-            md.push_str("\n\n");
+            md.push_str(".\n\n");
         }
 
         if self.revealed_riv {
@@ -746,6 +751,8 @@ async fn enemy_set_skills(path: web::Path<String>, form: web::Json<Vec<String>>)
 
     enemy.set_skills(form.into_inner());
 
+    enemy.save();
+
     HttpResponse::Ok().finish()
 }
 
@@ -1127,6 +1134,7 @@ async fn main() -> std::io::Result<()> {
                     .service(enemy_set_basics)
                     .service(enemy_set_attrs)
                     .service(enemy_set_riv)
+                    .service(enemy_set_skills)
                     .service(enemy_add_ability_trees)
                     .service(enemy_add_ability)
                     .service(enemy_add_note)
