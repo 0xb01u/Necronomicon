@@ -1,7 +1,7 @@
 /*
  *  Necronomicon: Web app for storing and displaying information about D&D
  *  enemies.
- *  Copyright (C) 2024  Bolu <bolu@tuta.io>
+ *  Copyright (C) 2024-2025  Bolu <bolu@tuta.io>
  *
  *  This program is free software: you can redistribute it and/or modify
  *  it under the terms of the GNU Affero General Public License as published
@@ -1116,7 +1116,7 @@ async fn reveal_enemy_ability(path: web::Path<String>, form: web::Json<IString>)
     enemy.save();
     enemy.generate_markdown();
 
-    return HttpResponse::Ok().finish();
+    HttpResponse::Ok().finish()
 }
 
 /**
