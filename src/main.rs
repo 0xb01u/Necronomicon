@@ -18,14 +18,17 @@
  */
 use actix_web::{delete, get, post, web, App, HttpResponse, HttpServer};
 use getset::{Getters, Setters};
+use indexmap::IndexMap;
 use serde::{Deserialize, Serialize};
 use std::{
     cmp,
-    collections::{BTreeMap, HashMap},
+    collections::HashMap,
     fs,
     path::Path,
     sync::{LazyLock, RwLock},
 };
+
+// TODO: case-insensitive comparisons for name of enemies, traits and riv effects.
 
 /* Macro to generate the correct target saving location for web pages. */
 #[macro_export]
@@ -115,7 +118,7 @@ struct Enemy {
     revealed_riv: bool,
 
     #[getset(get)]
-    ability_trees: BTreeMap<String, BTreeMap<String, (bool, String)>>,
+    ability_trees: IndexMap<String, IndexMap<String, (bool, String)>>,
 
     #[getset(get)]
     misc: Vec<String>,
@@ -135,7 +138,7 @@ impl Enemy {
     // would be minimal.
 
     fn add_ability_tree(&mut self, tree_name: String) {
-        self.ability_trees.insert(tree_name, BTreeMap::new());
+        self.ability_trees.insert(tree_name, IndexMap::new());
     }
 
     fn add_ability(&mut self, tree_name: &String, name: String, description: String) {
@@ -418,10 +421,29 @@ impl Enemy {
 
 // RwLock needed to make the singleton mutable;
 // RwLock instead of Mutex to allow multiple concurrent readers (just in case):
-static RIV_EFFECTS: LazyLock<RwLock<HashMap<String, RivEffect>>> =
-    LazyLock::new(|| RwLock::new(HashMap::new()));
-static TRAITS: LazyLock<RwLock<HashMap<String, Trait>>> =
-    LazyLock::new(|| RwLock::new(HashMap::new()));
+static RIV_EFFECTS: LazyLock<RwLock<HashMap<String, RivEffect>>> = LazyLock::new(|| {
+    let json =
+        fs::read_to_string("data/riv_effects.json").expect("Could not read data/riv_effects.json.");
+    let effects: Vec<RivEffect> = serde_json::from_str(&json)
+        .expect("Could not parse data/riv_effects.json as valid JSON data.");
+    let effect_map = HashMap::from_iter(
+        effects
+            .iter()
+            .map(|e| (e.name.clone().to_lowercase(), e.clone())),
+    );
+    RwLock::new(effect_map)
+});
+static TRAITS: LazyLock<RwLock<IndexMap<String, Trait>>> = LazyLock::new(|| {
+    let json = fs::read_to_string("data/traits.json").expect("Could not read data/traits.json.");
+    let traits: Vec<Trait> =
+        serde_json::from_str(&json).expect("Could not parse data/traits.json as valid JSON data.");
+    let trait_map = IndexMap::from_iter(
+        traits
+            .iter()
+            .map(|t| (t.name.clone().to_lowercase(), t.clone())),
+    );
+    RwLock::new(trait_map)
+});
 
 /* Macros and functions to manage global maps: */
 
@@ -454,32 +476,17 @@ macro_rules! shm_acc_w {
 }
 
 /**
- * Populates the global static RIV_EFFECTS map from the riv_effects.json persistent file.
- */
-fn populate_riv_effects() {
-    let json =
-        fs::read_to_string("data/riv_effects.json").expect("Could not read data/riv_effects.json.");
-    let riv_effects: Vec<RivEffect> = serde_json::from_str(&json)
-        .expect("Could not parse data/riv_effects.json as valid JSON data.");
-
-    let mut static_riv_effects = shm_acc_w!(RIV_EFFECTS);
-    static_riv_effects.drain(); // Remove all previous keys.
-
-    for e in riv_effects.iter() {
-        static_riv_effects.insert(e.name.clone().to_lowercase(), e.clone());
-    }
-}
-
-/**
  * Generates the page for the RivEffects, from the global static RIV_EFFECTS map.
  */
 fn gen_riv_page() {
-    let riv_effects = shm_acc_r!(RIV_EFFECTS);
+    let riv_map = shm_acc_r!(RIV_EFFECTS);
+    let mut riv_effects = riv_map.values().collect::<Vec<&RivEffect>>();
+    riv_effects.sort_by_key(|e| e.category.clone() + &e.name);
 
     let mut md = "---\nlayout: default\ntitle: RIV effects\n---\n".to_owned();
     md.push_str("# Resistance, immunity and vulnerability effects list\n\n");
 
-    for effect in riv_effects.values() {
+    for effect in riv_effects.into_iter() {
         md.push_str(format!("- {} ({})\n", effect.name, effect.category).as_str());
     }
     md.push_str("\n");
@@ -502,22 +509,6 @@ fn update_riv_persistence() {
 }
 
 /**
- * Populates the global static TRAITS map from the traits.json persistent file.
- */
-fn populate_traits() {
-    let json = fs::read_to_string("data/traits.json").expect("Could not read data/traits.json.");
-    let traits: Vec<Trait> =
-        serde_json::from_str(&json).expect("Could not parse data/traits.json as valid JSON data.");
-
-    let mut static_traits = shm_acc_w!(TRAITS);
-    static_traits.drain(); // Remove all previous keys.
-
-    for t in traits.iter() {
-        static_traits.insert(t.name.clone().to_lowercase(), t.clone());
-    }
-}
-
-/**
  * Generates the page for the Traits, from the global static TRAITS map.
  */
 fn gen_traits_page() {
@@ -528,39 +519,77 @@ fn gen_traits_page() {
     // "[the macro] creates a temporary value which is freed while still in use"
     // Seems like the implicit trait_map gets freed at the end of the one-liner,
     // but the `traits` variable still references its information later.
-    let mut traits = trait_map.values().collect::<Vec<&Trait>>();
-    // Sort for better human searching:
-    traits.sort_by_key(|e| e.name.clone());
+    let traits = trait_map.values().collect::<Vec<&Trait>>();
 
     let mut md = "---\nlayout: default\ntitle: Trait list\n---\n".to_owned();
-    md.push_str("# Trait list\n\n");
+    md.push_str("# Trait list\n");
 
-    let mut idx = 1;
+    // Table of contents:
+    let mut category_idx = 0;
+    let mut subcategory_idx = 0;
+    let mut last_category = String::new();
+    let mut last_subcategory = String::new();
     for t in &traits {
-        md.push_str(
-            format!(
-                "{}. [{}](#{})\n",
-                idx,
-                t.name,
-                t.name.to_lowercase().replace(" ", "-")
-            )
-            .as_str(),
-        );
-        idx += 1;
+        if t.category != last_category {
+            last_category = t.category.clone();
+            category_idx += 1;
+            md.push_str(
+                format!(
+                    "\n{}. [{}](#{})",
+                    category_idx,
+                    last_category,
+                    last_category.to_lowercase().replace(" ", "-")
+                )
+                .as_str(),
+            );
+            subcategory_idx = 1; // Reset subcategory index for new category.
+        }
+        if t.subcategory != last_subcategory {
+            last_subcategory = t.subcategory.clone();
+            md.push_str(
+                format!(
+                    " {}.{}. [{}](#{})",
+                    category_idx,
+                    subcategory_idx,
+                    last_subcategory,
+                    last_subcategory.to_lowercase().replace(" ", "-")
+                )
+                .as_str(),
+            );
+            subcategory_idx += 1;
+        }
     }
-    md.push_str("\n");
+    md.push_str("\n\n");
 
+    // Trait description:
+    let mut last_category = String::new();
+    let mut last_subcategory = String::new();
     for t in traits {
-        md.push_str(
-            format!(
-                "## {} <a id=\"{}\"></a>\n\n",
-                t.name,
-                t.name.to_lowercase().replace(" ", "-").as_str()
-            )
-            .as_str(),
-        );
-        md.push_str(format!("- **Category:** {}\n", t.category).as_str());
-        md.push_str(format!("- **Subcategory:** {}\n\n", t.subcategory).as_str());
+        if t.category != last_category {
+            last_category = t.category.clone();
+            md.push_str(
+                format!(
+                    "# {} <a id=\"{}\"></a>\n\n",
+                    last_category,
+                    last_category.to_lowercase().replace(" ", "-")
+                )
+                .as_str(),
+            );
+        }
+        if t.subcategory != last_subcategory {
+            last_subcategory = t.subcategory.clone();
+            md.push_str(
+                format!(
+                    "## {} <a id=\"{}\"></a>\n\n",
+                    last_subcategory,
+                    last_subcategory.to_lowercase().replace(" ", "-")
+                )
+                .as_str(),
+            );
+        }
+        md.push_str(format!("### {}\n\n", t.name).as_str());
+        //md.push_str(format!("- **Category:** {}\n", t.category).as_str());
+        //md.push_str(format!("- **Subcategory:** {}\n\n", t.subcategory).as_str());
         md.push_str(t.description.as_str());
         md.push_str("\n\n");
     }
@@ -1077,7 +1106,6 @@ async fn refresh_enemy_page(path: web::Path<String>) -> HttpResponse {
     HttpResponse::Ok().finish()
 }
 
-// TODO: Sanitize RivEffect and Trait names?
 /**
  * Endpoint for adding a RivEffect.
  */
@@ -1117,9 +1145,7 @@ async fn add_trait(form: web::Json<Trait>) -> HttpResponse {
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
     // Initialize global maps:
-    populate_traits();
     gen_traits_page();
-    populate_riv_effects();
     gen_riv_page();
 
     // Create and run server:
