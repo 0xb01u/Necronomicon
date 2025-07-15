@@ -23,12 +23,12 @@ use serde::{Deserialize, Serialize};
 use std::{
     cmp,
     collections::HashMap,
+    fmt::{Display, Formatter, Result as FmtResult},
     fs,
+    hash::{Hash, Hasher},
     path::Path,
     sync::{LazyLock, RwLock},
 };
-
-// TODO: case-insensitive comparisons for name of enemies, traits and riv effects.
 
 /* Macro to generate the correct target saving location for web pages. */
 #[macro_export]
@@ -36,6 +36,40 @@ macro_rules! webpage_path {
     ($uri:expr) => {
         format!("front/{}", $uri)
     };
+}
+
+#[cfg_attr(debug_assertions, derive(Debug))]
+#[derive(Clone, Eq, PartialOrd, Serialize, Deserialize)]
+struct IString(String);
+
+impl IString {
+    fn new<S: AsRef<str>>(s: S) -> IString {
+        IString(s.as_ref().to_string())
+    }
+}
+
+impl PartialEq for IString {
+    fn eq(&self, other: &Self) -> bool {
+        self.0.to_lowercase() == other.0.to_lowercase()
+    }
+}
+
+impl PartialEq<&str> for IString {
+    fn eq(&self, other: &&str) -> bool {
+        self.0.to_lowercase() == other.to_lowercase()
+    }
+}
+
+impl Hash for IString {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.0.to_lowercase().hash(state);
+    }
+}
+
+impl Display for IString {
+    fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
+        write!(f, "{}", self.0)
+    }
 }
 
 #[cfg_attr(debug_assertions, derive(Debug))]
@@ -118,7 +152,7 @@ struct Enemy {
     revealed_riv: bool,
 
     #[getset(get)]
-    ability_trees: IndexMap<String, IndexMap<String, (bool, String)>>,
+    ability_trees: IndexMap<IString, IndexMap<IString, (bool, String)>>,
 
     #[getset(get)]
     misc: Vec<String>,
@@ -137,11 +171,11 @@ impl Enemy {
     // However, the logic would get considerably more complicated, and the benefits in this case
     // would be minimal.
 
-    fn add_ability_tree(&mut self, tree_name: String) {
+    fn add_ability_tree(&mut self, tree_name: IString) {
         self.ability_trees.insert(tree_name, IndexMap::new());
     }
 
-    fn add_ability(&mut self, tree_name: &String, name: String, description: String) {
+    fn add_ability(&mut self, tree_name: &IString, name: IString, description: String) {
         self.ability_trees
             .get_mut(tree_name)
             .expect(format!("Ability tree {} not found in enemy struct.", tree_name).as_str())
@@ -150,23 +184,23 @@ impl Enemy {
 
     fn change_ability_description(
         &mut self,
-        tree_name: &String,
-        name: &String,
+        tree_name: &IString,
+        name: IString,
         description: String,
     ) {
         self.ability_trees
             .get_mut(tree_name)
             .expect(format!("Ability tree {} not found in enemy struct.", tree_name).as_str())
-            .entry(name.clone()) // Cloned because the entry is created if it does not exist.
-            .and_modify(|desc| *desc = (desc.0, description));
+            .entry(name) // Cloned because the entry is created if it does not exist.
+            .and_modify(|entry| *entry = (entry.0, description));
     }
 
-    fn reveal_ability(&mut self, tree_name: &String, name: &String) {
+    fn reveal_ability(&mut self, tree_name: &IString, name: IString) {
         self.ability_trees
             .get_mut(tree_name)
             .expect(format!("Ability tree {} not found in enemy struct.", tree_name).as_str())
-            .entry(name.clone()) // Cloned because the entry is created if it does not exist.
-            .and_modify(|desc| *desc = (true, desc.1.clone()));
+            .entry(name) // Cloned because the entry is created if it does not exist.
+            .and_modify(|entry| *entry = (true, entry.1.clone()));
     }
 
     /**
@@ -266,7 +300,7 @@ impl Enemy {
                         " 5.{}. [{}](#{})\n",
                         i + 1,
                         tree_name,
-                        tree_name.to_lowercase()
+                        tree_name.0.to_lowercase()
                     )
                     .as_str(),
                 );
@@ -385,7 +419,7 @@ impl Enemy {
                     format!(
                         "## {} <a id=\"{}\"></a>\n\n",
                         tree_name,
-                        tree_name.to_lowercase()
+                        tree_name.0.to_lowercase()
                     )
                     .as_str(),
                 );
@@ -421,7 +455,7 @@ impl Enemy {
 
 // RwLock needed to make the singleton mutable;
 // RwLock instead of Mutex to allow multiple concurrent readers (just in case):
-static RIV_EFFECTS: LazyLock<RwLock<HashMap<String, RivEffect>>> = LazyLock::new(|| {
+static RIV_EFFECTS: LazyLock<RwLock<HashMap<IString, RivEffect>>> = LazyLock::new(|| {
     let json =
         fs::read_to_string("data/riv_effects.json").expect("Could not read data/riv_effects.json.");
     let effects: Vec<RivEffect> = serde_json::from_str(&json)
@@ -429,18 +463,18 @@ static RIV_EFFECTS: LazyLock<RwLock<HashMap<String, RivEffect>>> = LazyLock::new
     let effect_map = HashMap::from_iter(
         effects
             .iter()
-            .map(|e| (e.name.clone().to_lowercase(), e.clone())),
+            .map(|e| (IString::new(e.name.clone()), e.clone())),
     );
     RwLock::new(effect_map)
 });
-static TRAITS: LazyLock<RwLock<IndexMap<String, Trait>>> = LazyLock::new(|| {
+static TRAITS: LazyLock<RwLock<IndexMap<IString, Trait>>> = LazyLock::new(|| {
     let json = fs::read_to_string("data/traits.json").expect("Could not read data/traits.json.");
     let traits: Vec<Trait> =
         serde_json::from_str(&json).expect("Could not parse data/traits.json as valid JSON data.");
     let trait_map = IndexMap::from_iter(
         traits
             .iter()
-            .map(|t| (t.name.clone().to_lowercase(), t.clone())),
+            .map(|t| (IString::new(t.name.clone()), t.clone())),
     );
     RwLock::new(trait_map)
 });
@@ -530,7 +564,7 @@ fn gen_traits_page() {
     let mut last_category = String::new();
     let mut last_subcategory = String::new();
     for t in &traits {
-        if t.category != last_category {
+        if last_category != t.category {
             last_category = t.category.clone();
             category_idx += 1;
             md.push_str(
@@ -544,7 +578,7 @@ fn gen_traits_page() {
             );
             subcategory_idx = 1; // Reset subcategory index for new category.
         }
-        if t.subcategory != last_subcategory {
+        if last_subcategory != t.subcategory {
             last_subcategory = t.subcategory.clone();
             md.push_str(
                 format!(
@@ -565,7 +599,7 @@ fn gen_traits_page() {
     let mut last_category = String::new();
     let mut last_subcategory = String::new();
     for t in traits {
-        if t.category != last_category {
+        if last_category != t.category {
             last_category = t.category.clone();
             md.push_str(
                 format!(
@@ -576,7 +610,7 @@ fn gen_traits_page() {
                 .as_str(),
             );
         }
-        if t.subcategory != last_subcategory {
+        if last_subcategory != t.subcategory {
             last_subcategory = t.subcategory.clone();
             md.push_str(
                 format!(
@@ -646,8 +680,8 @@ struct EnemyRIVForm {
 #[cfg_attr(debug_assertions, derive(Debug))]
 #[derive(Deserialize)]
 struct EnemyAbilityForm {
-    tree: String,
-    name: String,
+    tree: IString,
+    name: IString,
     description: String,
 }
 
@@ -714,7 +748,7 @@ async fn enemy_set_basics(
     let trait_map = shm_acc_r!(TRAITS);
     let mut traits = Vec::<Trait>::new();
     for trait_name_input in &form.traits {
-        let trait_name = trait_name_input.to_lowercase();
+        let trait_name = IString::new(trait_name_input);
 
         // Check that the specified trait exists:
         if !trait_map.contains_key(&trait_name) {
@@ -803,7 +837,7 @@ async fn enemy_set_riv(path: web::Path<String>, form: web::Json<EnemyRIVForm>) -
     /* Set resistances: */
     let mut resistances = Vec::<RivEffect>::new();
     for resistance_name_input in &form.resistances {
-        let resistance_name = resistance_name_input.to_lowercase();
+        let resistance_name = IString::new(resistance_name_input);
 
         // Check for wildcard "None" to specify no resistances:
         if form.resistances.len() == 1 && resistance_name == "none" {
@@ -822,7 +856,7 @@ async fn enemy_set_riv(path: web::Path<String>, form: web::Json<EnemyRIVForm>) -
     /* Set immunities: */
     let mut immunities = Vec::<RivEffect>::new();
     for immunity_name_input in &form.immunities {
-        let immunity_name = immunity_name_input.to_lowercase();
+        let immunity_name = IString::new(immunity_name_input);
 
         // Check for wildcard "None" to specify no resistances:
         if form.immunities.len() == 1 && immunity_name == "none" {
@@ -841,7 +875,7 @@ async fn enemy_set_riv(path: web::Path<String>, form: web::Json<EnemyRIVForm>) -
     /* Set vulnerabilities: */
     let mut vulnerabilities = Vec::<RivEffect>::new();
     for vulnerability_name_input in &form.vulnerabilities {
-        let vulnerability_name = vulnerability_name_input.to_lowercase();
+        let vulnerability_name = IString::new(vulnerability_name_input);
 
         // Check for wildcard "None" to specify no resistances:
         if form.vulnerabilities.len() == 1 && vulnerability_name == "none" {
@@ -868,7 +902,7 @@ async fn enemy_set_riv(path: web::Path<String>, form: web::Json<EnemyRIVForm>) -
 #[post("/{enemy}/ability_trees")]
 async fn enemy_add_ability_trees(
     path: web::Path<String>,
-    form: web::Json<Vec<String>>,
+    form: web::Json<Vec<IString>>,
 ) -> HttpResponse {
     let data_path = Enemy::to_uri_data(&path.into_inner());
 
@@ -879,7 +913,7 @@ async fn enemy_add_ability_trees(
     let mut enemy = Enemy::load(data_path);
 
     for tree_name in form.into_inner() {
-        enemy.add_ability_tree(tree_name.clone());
+        enemy.add_ability_tree(tree_name);
     }
 
     enemy.save();
@@ -903,11 +937,11 @@ async fn enemy_add_ability(
 
     let mut enemy = Enemy::load(data_path);
 
-    let tree = &form.tree;
-    if !enemy.ability_trees().contains_key(tree) {
-        return HttpResponse::BadRequest().body(tree.clone());
+    let tree = form.tree.clone();
+    if !enemy.ability_trees().contains_key(&tree) {
+        return HttpResponse::BadRequest().body(tree.0);
     }
-    enemy.add_ability(tree, form.name.clone(), form.description.clone());
+    enemy.add_ability(&tree, form.name.clone(), form.description.clone());
 
     enemy.save();
 
@@ -1070,17 +1104,17 @@ async fn reveal_enemy_ability(
 
     let mut enemy = Enemy::load(data_path);
 
-    let tree = &form.tree;
-    if !enemy.ability_trees().contains_key(tree) {
-        return HttpResponse::BadRequest().body(tree.clone());
+    let tree = form.tree.clone();
+    if !enemy.ability_trees().contains_key(&tree) {
+        return HttpResponse::BadRequest().body(tree.0);
     }
 
-    let ability = &form.name;
-    if !enemy.ability_trees()[tree].contains_key(ability) {
-        return HttpResponse::BadRequest().body(ability.clone());
+    let ability = form.name.clone();
+    if !enemy.ability_trees()[&tree].contains_key(&ability) {
+        return HttpResponse::BadRequest().body(ability.0);
     }
 
-    enemy.reveal_ability(tree, ability);
+    enemy.reveal_ability(&tree, ability);
 
     enemy.save();
     enemy.generate_markdown();
@@ -1113,11 +1147,13 @@ async fn refresh_enemy_page(path: web::Path<String>) -> HttpResponse {
 async fn add_riv_effect(form: web::Json<RivEffect>) -> HttpResponse {
     let effect = form.into_inner();
 
-    if shm_acc_r!(RIV_EFFECTS).contains_key(&effect.name) {
-        return HttpResponse::BadRequest().body(effect.name);
+    let name_key = IString::new(effect.name.clone());
+
+    if shm_acc_r!(RIV_EFFECTS).contains_key(&name_key) {
+        return HttpResponse::BadRequest().body(effect.name.clone());
     }
 
-    shm_acc_w!(RIV_EFFECTS).insert(effect.name.clone(), effect.clone());
+    shm_acc_w!(RIV_EFFECTS).insert(name_key, effect.clone());
     update_riv_persistence();
     gen_riv_page();
 
@@ -1131,11 +1167,13 @@ async fn add_riv_effect(form: web::Json<RivEffect>) -> HttpResponse {
 async fn add_trait(form: web::Json<Trait>) -> HttpResponse {
     let t = form.into_inner();
 
-    if shm_acc_r!(TRAITS).contains_key(&t.name) {
-        return HttpResponse::BadRequest().body(t.name);
+    let name_key = IString::new(t.name.clone());
+
+    if shm_acc_r!(TRAITS).contains_key(&name_key) {
+        return HttpResponse::BadRequest().body(t.name.clone());
     }
 
-    shm_acc_w!(TRAITS).insert(t.name.clone(), t.clone());
+    shm_acc_w!(TRAITS).insert(name_key, t.clone());
     update_traits_persistence();
     gen_traits_page();
 
