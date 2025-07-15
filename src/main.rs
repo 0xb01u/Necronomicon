@@ -679,7 +679,7 @@ struct EnemyRIVForm {
 
 #[cfg_attr(debug_assertions, derive(Debug))]
 #[derive(Deserialize)]
-struct EnemyAbilityForm {
+struct EnemyAddAbilityForm {
     tree: IString,
     name: IString,
     description: String,
@@ -927,7 +927,7 @@ async fn enemy_add_ability_trees(
 #[post("/{enemy}/ability")]
 async fn enemy_add_ability(
     path: web::Path<String>,
-    form: web::Json<EnemyAbilityForm>,
+    form: web::Json<EnemyAddAbilityForm>,
 ) -> HttpResponse {
     let data_path = Enemy::to_uri_data(&path.into_inner());
 
@@ -1092,10 +1092,7 @@ async fn reveal_enemy_info(path: web::Path<(String, String)>) -> HttpResponse {
  * Endpoint for revealing an enemy's abilities.
  */
 #[post("/{enemy}/reveal/ability")]
-async fn reveal_enemy_ability(
-    path: web::Path<String>,
-    form: web::Json<EnemyAbilityForm>,
-) -> HttpResponse {
+async fn reveal_enemy_ability(path: web::Path<String>, form: web::Json<IString>) -> HttpResponse {
     let data_path = Enemy::to_uri_data(&path.into_inner());
 
     if !Path::new(&data_path).exists() {
@@ -1104,22 +1101,22 @@ async fn reveal_enemy_ability(
 
     let mut enemy = Enemy::load(data_path);
 
-    let tree = form.tree.clone();
-    if !enemy.ability_trees().contains_key(&tree) {
-        return HttpResponse::BadRequest().body(tree.0);
-    }
+    let ability = form.into_inner();
+    let tree = enemy
+        .ability_trees()
+        .iter()
+        .find(|(_, tree)| tree.contains_key(&ability));
 
-    let ability = form.name.clone();
-    if !enemy.ability_trees()[&tree].contains_key(&ability) {
+    if let Some((tree_name, _)) = tree {
+        enemy.reveal_ability(&tree_name.clone(), ability);
+    } else {
         return HttpResponse::BadRequest().body(ability.0);
     }
-
-    enemy.reveal_ability(&tree, ability);
 
     enemy.save();
     enemy.generate_markdown();
 
-    HttpResponse::Ok().finish()
+    return HttpResponse::Ok().finish();
 }
 
 /**
