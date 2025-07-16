@@ -849,21 +849,37 @@ macro_rules! parse_riv {
                 break;
             }
 
-            // Check that the specified $riv exists:
-            if !shm_acc_r!(RIV_EFFECTS).contains_key(&effect) {
+            // Check that the specified effect exists:
+            let riv_effects = shm_acc_r!(RIV_EFFECTS);
+            if !riv_effects.contains_key(&effect) {
                 // Try adding "ed" to the end, for condition effects not sent in participle form:
-                if effect.ends_with("y") {
-                    effect.pop();
-                    effect += "ied";
+                let mut participle = effect.clone();
+                if participle.ends_with("y") {
+                    participle.pop();
+                    participle += "ied";
                 } else if effect.ends_with("e") {
-                    effect += "d";
+                    participle += "d";
                 } else {
-                    effect += "ed";
+                    participle += "ed";
                 }
 
-                if !shm_acc_r!(RIV_EFFECTS).contains_key(&effect) {
-                    return HttpResponse::BadRequest().body(effect.0.clone());
+                if !riv_effects.contains_key(&effect) {
+                    // Maybe the participle has to double the final consonant...
+                    participle = effect.clone();
+                    let consonant = &effect
+                        .chars()
+                        .last()
+                        .expect("Effect name is empty")
+                        .to_string();
+                    participle = participle + consonant + consonant + "ed";
+
+                    if !riv_effects.contains_key(&participle) {
+                        return HttpResponse::BadRequest().body(effect.0.clone());
+                    }
                 }
+
+                // Update effect to the proper name:
+                effect = participle;
             }
 
             effect_vec.push(shm_acc_r!(RIV_EFFECTS)[&effect].clone());
