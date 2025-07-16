@@ -26,6 +26,7 @@ use std::{
     fmt::{Display, Formatter, Result as FmtResult},
     fs,
     hash::{Hash, Hasher},
+    ops::{Add, AddAssign, Deref, DerefMut},
     path::Path,
     sync::{LazyLock, RwLock},
 };
@@ -69,6 +70,34 @@ impl Hash for IString {
 impl Display for IString {
     fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
         write!(f, "{}", self.0)
+    }
+}
+
+impl<S: AsRef<str>> Add<S> for IString {
+    type Output = IString;
+
+    fn add(self, other: S) -> IString {
+        IString(self.0 + other.as_ref())
+    }
+}
+
+impl<S: AsRef<str>> AddAssign<S> for IString {
+    fn add_assign(&mut self, other: S) {
+        self.0 += other.as_ref();
+    }
+}
+
+impl Deref for IString {
+    type Target = String;
+
+    fn deref(&self) -> &String {
+        &self.0
+    }
+}
+
+impl DerefMut for IString {
+    fn deref_mut(&mut self) -> &mut String {
+        &mut self.0
     }
 }
 
@@ -287,7 +316,7 @@ impl Enemy {
                         " 5.{}. [{}](#{})\n",
                         i + 1,
                         tree_name,
-                        tree_name.0.to_lowercase()
+                        tree_name.to_lowercase()
                     )
                     .as_str(),
                 );
@@ -406,7 +435,7 @@ impl Enemy {
                     format!(
                         "## {} <a id=\"{}\"></a>\n\n",
                         tree_name,
-                        tree_name.0.to_lowercase()
+                        tree_name.to_lowercase()
                     )
                     .as_str(),
                 );
@@ -806,6 +835,43 @@ async fn enemy_set_skills(path: web::Path<String>, form: web::Json<Vec<String>>)
     HttpResponse::Ok().finish()
 }
 
+/// Macro to parse RIV effects from a vector of strings.
+///
+/// Returns a vector of `RivEffect`.
+macro_rules! parse_riv {
+    ($data_vec:expr) => {{
+        let mut effect_vec = Vec::<RivEffect>::new();
+        for effect in &$data_vec {
+            let mut effect = IString::new(effect);
+
+            // Check for wildcard "None" to specify no resistances:
+            if $data_vec.len() == 1 && effect == "none" {
+                break;
+            }
+
+            // Check that the specified $riv exists:
+            if !shm_acc_r!(RIV_EFFECTS).contains_key(&effect) {
+                // Try adding "ed" to the end, for condition effects not sent in participle form:
+                if effect.ends_with("y") {
+                    effect.pop();
+                    effect += "ied";
+                } else if effect.ends_with("e") {
+                    effect += "d";
+                } else {
+                    effect += "ed";
+                }
+
+                if !shm_acc_r!(RIV_EFFECTS).contains_key(&effect) {
+                    return HttpResponse::BadRequest().body(effect.0.clone());
+                }
+            }
+
+            effect_vec.push(shm_acc_r!(RIV_EFFECTS)[&effect].clone());
+        }
+        effect_vec
+    }};
+}
+
 /**
  * Endpoint for modifying the resistances, immunities and vulnerabilities of an enemy.
  */
@@ -819,64 +885,14 @@ async fn enemy_set_riv(path: web::Path<String>, form: web::Json<EnemyRIVForm>) -
 
     let mut enemy = Enemy::load(data_path);
 
-    let riv_map = shm_acc_r!(RIV_EFFECTS);
-
     /* Set resistances: */
-    let mut resistances = Vec::<RivEffect>::new();
-    for resistance_name_input in &form.resistances {
-        let resistance_name = IString::new(resistance_name_input);
-
-        // Check for wildcard "None" to specify no resistances:
-        if form.resistances.len() == 1 && resistance_name == "none" {
-            break;
-        }
-
-        // Check that the specified resistance exists:
-        if !riv_map.contains_key(&resistance_name) {
-            return HttpResponse::BadRequest().body(resistance_name_input.clone());
-        }
-
-        resistances.push(riv_map[&resistance_name].clone());
-    }
-    enemy.set_resistances(resistances);
+    enemy.set_resistances(parse_riv!(form.resistances));
 
     /* Set immunities: */
-    let mut immunities = Vec::<RivEffect>::new();
-    for immunity_name_input in &form.immunities {
-        let immunity_name = IString::new(immunity_name_input);
-
-        // Check for wildcard "None" to specify no resistances:
-        if form.immunities.len() == 1 && immunity_name == "none" {
-            break;
-        }
-
-        // Check that the specified immunity exists:
-        if !riv_map.contains_key(&immunity_name) {
-            return HttpResponse::BadRequest().body(immunity_name_input.clone());
-        }
-
-        immunities.push(riv_map[&immunity_name].clone());
-    }
-    enemy.set_immunities(immunities);
+    enemy.set_immunities(parse_riv!(form.immunities));
 
     /* Set vulnerabilities: */
-    let mut vulnerabilities = Vec::<RivEffect>::new();
-    for vulnerability_name_input in &form.vulnerabilities {
-        let vulnerability_name = IString::new(vulnerability_name_input);
-
-        // Check for wildcard "None" to specify no resistances:
-        if form.vulnerabilities.len() == 1 && vulnerability_name == "none" {
-            break;
-        }
-
-        // Check that the specified vulnerability exists:
-        if !riv_map.contains_key(&vulnerability_name) {
-            return HttpResponse::BadRequest().body(vulnerability_name_input.clone());
-        }
-
-        vulnerabilities.push(riv_map[&vulnerability_name].clone());
-    }
-    enemy.set_vulnerabilities(vulnerabilities);
+    enemy.set_vulnerabilities(parse_riv!(form.vulnerabilities));
 
     enemy.save();
 
