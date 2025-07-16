@@ -182,19 +182,6 @@ impl Enemy {
             .insert(name, (false, description));
     }
 
-    fn change_ability_description(
-        &mut self,
-        tree_name: &IString,
-        name: IString,
-        description: String,
-    ) {
-        self.ability_trees
-            .get_mut(tree_name)
-            .expect(format!("Ability tree {} not found in enemy struct.", tree_name).as_str())
-            .entry(name) // Cloned because the entry is created if it does not exist.
-            .and_modify(|entry| *entry = (entry.0, description));
-    }
-
     fn reveal_ability(&mut self, tree_name: &IString, name: IString) {
         self.ability_trees
             .get_mut(tree_name)
