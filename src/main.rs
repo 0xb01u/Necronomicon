@@ -863,7 +863,7 @@ macro_rules! parse_riv {
                     participle += "ed";
                 }
 
-                if !riv_effects.contains_key(&effect) {
+                if !riv_effects.contains_key(&participle) {
                     // Maybe the participle has to double the final consonant...
                     participle = effect.clone();
                     let consonant = &effect
