@@ -119,7 +119,7 @@ struct Trait {
 
 /* Enemy object: */
 #[cfg_attr(debug_assertions, derive(Debug))]
-#[derive(Default, Serialize, Deserialize, Getters, Setters)]
+#[derive(Default, Clone, Serialize, Deserialize, Getters, Setters)]
 struct Enemy {
     #[getset(get)]
     name: String,
@@ -1097,10 +1097,31 @@ async fn reveal_enemy_info(path: web::Path<(String, String)>) -> HttpResponse {
     let mut enemy = Enemy::load(data_path);
 
     match info.as_str() {
-        "basics" => enemy.set_revealed_basics(true),
-        "attrs" => enemy.set_revealed_attrs(true),
-        "skills" => enemy.set_revealed_skills(true),
-        "riv" => enemy.set_revealed_riv(true),
+        "basics" => {
+            enemy.set_revealed_basics(true);
+        }
+        "attrs" => {
+            enemy.set_revealed_attrs(true);
+        }
+        "skills" => {
+            enemy.set_revealed_skills(true);
+        }
+        "riv" => {
+            enemy.set_revealed_riv(true);
+        }
+        "all" => {
+            enemy.set_revealed(true);
+            enemy.set_revealed_basics(true);
+            enemy.set_revealed_attrs(true);
+            enemy.set_revealed_skills(true);
+            enemy.set_revealed_riv(true);
+
+            for (tree_name, ability_tree) in enemy.clone().ability_trees() {
+                for ability_name in ability_tree.keys() {
+                    enemy.reveal_ability(tree_name, ability_name.clone());
+                }
+            }
+        }
         _ => return HttpResponse::BadRequest().body(info),
     };
 
