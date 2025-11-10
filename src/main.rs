@@ -16,7 +16,7 @@
  *  You should have received a copy of the GNU Affero General Public License
  *  along with this program. If not, see <https://www.gnu.org/licenses/>.
  */
-use actix_web::{delete, get, post, web, App, HttpResponse, HttpServer};
+use actix_web::{App, HttpResponse, HttpServer, delete, get, post, web};
 use getset::{Getters, Setters};
 use indexmap::IndexMap;
 use serde::{Deserialize, Serialize};
