@@ -16,7 +16,7 @@
  *  You should have received a copy of the GNU Affero General Public License
  *  along with this program. If not, see <https://www.gnu.org/licenses/>.
  */
-use actix_web::{App, HttpResponse, HttpServer, delete, get, post, web};
+use actix_web::{delete, get, post, web, App, HttpResponse, HttpServer};
 use getset::{Getters, Setters};
 use indexmap::IndexMap;
 use serde::{Deserialize, Serialize};
@@ -308,7 +308,7 @@ impl Enemy {
         md.push_str(
             "1. [Basic information](#basics) 1.1. [Traits](#traits)\n\
              2. [Ability modifiers](#stats)\n\
-             2. [Skills](#skills)\n\
+             3. [Skills](#skills)\n\
              4. [Resistances, immunities, vulnerabilities](#riv)\n\
              5. [Abilities](#abilities)\n",
         );
@@ -398,10 +398,13 @@ impl Enemy {
                     .as_str(),
                 );
             }
-            md.pop(); // Remove leftover space.
-            md.pop(); // Remove leftover comma.
+            // Enemies with no skills are common; treat trailing spaces with care:
+            if self.skills.len() > 0 {
+                md.pop(); // Remove leftover space.
+                md.pop(); // Remove leftover comma.
 
-            md.push_str(".\n\n");
+                md.push_str(".\n\n");
+            }
         }
 
         if self.revealed_riv {
