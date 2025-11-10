@@ -132,8 +132,10 @@ struct Enemy {
     hp: i16,
     #[getset(get, set)]
     ac: u8,
+    // TODO: Field for Martial DC.
     #[getset(get, set)]
     mov: u8,
+    // TODO: Do not embed the entire Trait structs here.
     #[getset(get, set)]
     traits: Vec<Trait>,
     #[getset(get, set)]
@@ -171,6 +173,7 @@ struct Enemy {
     #[getset(get, set)]
     revealed_skills: bool,
 
+    // TODO: Do not embed the entire RivEffect structs here.
     #[getset(get, set)]
     resistances: Vec<RivEffect>,
     #[getset(get, set)]
@@ -227,9 +230,9 @@ impl Enemy {
     }
 
     /**
-     * Remove, by index, a note from the enemy.
+     * Delete, by index, a note from the enemy.
      */
-    fn remove_misc(&mut self, idx: usize) {
+    fn del_misc(&mut self, idx: usize) {
         self.misc.remove(idx - 1);
     }
 
@@ -1002,10 +1005,10 @@ async fn enemy_del_note(path: web::Path<String>, form: web::Json<usize>) -> Http
     let mut enemy = Enemy::load(data_path);
 
     let idx = form.into_inner();
-    if idx >= enemy.misc().len() {
+    if idx > enemy.misc().len() {
         return HttpResponse::BadRequest().finish();
     }
-    enemy.remove_misc(idx);
+    enemy.del_misc(idx);
 
     enemy.save();
     enemy.generate_markdown();
@@ -1177,6 +1180,26 @@ async fn add_riv_effect(form: web::Json<RivEffect>) -> HttpResponse {
 }
 
 /**
+ * Endpoint for deleting a RivEffect.
+ */
+#[delete("/riv")]
+async fn del_riv_effect(form: web::Json<String>) -> HttpResponse {
+    let effect_name = form.into_inner();
+
+    let name_key = IString::new(effect_name.clone());
+
+    if !shm_acc_r!(RIV_EFFECTS).contains_key(&name_key) {
+        return HttpResponse::BadRequest().body(effect_name.clone());
+    }
+
+    shm_acc_w!(RIV_EFFECTS).remove(&name_key);
+    update_riv_persistence();
+    gen_riv_page();
+
+    HttpResponse::Ok().finish()
+}
+
+/**
  * Endpoint for adding a Trait.
  */
 #[post("/trait")]
@@ -1190,6 +1213,26 @@ async fn add_trait(form: web::Json<Trait>) -> HttpResponse {
     }
 
     shm_acc_w!(TRAITS).insert(name_key, t.clone());
+    update_traits_persistence();
+    gen_traits_page();
+
+    HttpResponse::Ok().finish()
+}
+
+/**
+ * Endpoint for deleting a Trait.
+ */
+#[delete("/trait")]
+async fn del_trait(form: web::Json<String>) -> HttpResponse {
+    let t = form.into_inner();
+
+    let name_key = IString::new(t.clone());
+
+    if !shm_acc_r!(TRAITS).contains_key(&name_key) {
+        return HttpResponse::BadRequest().body(t.clone());
+    }
+
+    shm_acc_w!(TRAITS).shift_remove(&name_key);
     update_traits_persistence();
     gen_traits_page();
 
@@ -1227,7 +1270,9 @@ async fn main() -> std::io::Result<()> {
                     .service(refresh_enemy_page),
             )
             .service(add_riv_effect)
+            .service(del_riv_effect)
             .service(add_trait)
+            .service(del_trait)
     })
     .bind(("127.0.0.1", 8080))?
     .run()
