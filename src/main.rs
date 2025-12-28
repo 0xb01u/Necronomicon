@@ -199,27 +199,41 @@ impl Enemy {
         enemy
     }
 
-    // Maybe, proper error propagation should be used instead of .expect()s.
-    // However, the logic would get considerably more complicated, and the benefits in this case
-    // would be minimal.
-
     fn add_ability_tree(&mut self, tree_name: IString) {
         self.ability_trees.insert(tree_name, IndexMap::new());
     }
 
-    fn add_ability(&mut self, tree_name: &IString, name: IString, description: String) {
-        self.ability_trees
-            .get_mut(tree_name)
-            .expect(format!("Ability tree {} not found in enemy struct.", tree_name).as_str())
-            .insert(name, (false, description));
+    fn add_ability(
+        &mut self,
+        tree_name: &IString,
+        name: IString,
+        description: String,
+    ) -> Result<(), String> {
+        if let Some(tree) = self.ability_trees.get_mut(tree_name) {
+            tree.insert(name, (false, description));
+        } else {
+            return Err(format!(
+                "Ability tree {} not found in enemy struct.",
+                tree_name
+            ));
+        }
+
+        Ok(())
     }
 
-    fn reveal_ability(&mut self, tree_name: &IString, name: IString) {
-        self.ability_trees
-            .get_mut(tree_name)
-            .expect(format!("Ability tree {} not found in enemy struct.", tree_name).as_str())
-            .entry(name) // Cloned because the entry is created if it does not exist.
-            .and_modify(|entry| *entry = (true, entry.1.clone()));
+    fn reveal_ability(&mut self, tree_name: &IString, name: IString) -> Result<(), String> {
+        if let Some(tree) = self.ability_trees.get_mut(tree_name) {
+            tree.entry(name)
+                .and_modify(|entry| *entry = (true, entry.1.clone()));
+            // entry.1 is cloned because the entry is being created in this function if it does not exist.
+        } else {
+            return Err(format!(
+                "Ability tree {} not found in enemy struct.",
+                tree_name
+            ));
+        }
+
+        Ok(())
     }
 
     /**
@@ -236,11 +250,19 @@ impl Enemy {
         self.misc.remove(idx - 1);
     }
 
-    fn load(path: String) -> Enemy {
-        let json =
-            fs::read_to_string(&path).expect(format!("Could not read {}", path.clone()).as_str());
-        serde_json::from_str(&json)
-            .expect(format!("Could not parse {} as valid JSON data.", path).as_str())
+    // TODO: Change (non-fs?) expects to error propagation with Results<(), Err>.
+    fn load(path: String) -> Result<Enemy, String> {
+        let Ok(json) = fs::read_to_string(&path) else {
+            return Err(format!("Could not read {}", path.clone()));
+        };
+        let Ok(enemy) = serde_json::from_str(&json) else {
+            return Err(format!(
+                "Could not parse {} as valid JSON data.",
+                path.clone()
+            ));
+        };
+
+        Ok(enemy)
     }
 
     fn save(&self) {
@@ -737,7 +759,10 @@ async fn retrieve_enemy(form: web::Json<String>) -> HttpResponse {
         return HttpResponse::NotFound().finish();
     }
 
-    let enemy = Enemy::load(data_path);
+    let enemy = match Enemy::load(data_path) {
+        Ok(e) => e,
+        Err(e) => return HttpResponse::BadRequest().body(e),
+    };
     if !enemy.revealed {
         // Enemy not revealed yet, return Forbidden:
         return HttpResponse::Forbidden().finish();
@@ -760,7 +785,10 @@ async fn enemy_set_basics(
         return HttpResponse::NotFound().finish();
     }
 
-    let mut enemy = Enemy::load(data_path);
+    let mut enemy = match Enemy::load(data_path) {
+        Ok(e) => e,
+        Err(e) => return HttpResponse::BadRequest().body(e),
+    };
 
     enemy.set_enemy_type(form.enemy_type.clone());
     enemy.set_hp(form.hp);
@@ -800,7 +828,10 @@ async fn enemy_set_attrs(
         return HttpResponse::NotFound().finish();
     }
 
-    let mut enemy = Enemy::load(data_path);
+    let mut enemy = match Enemy::load(data_path) {
+        Ok(e) => e,
+        Err(e) => return HttpResponse::BadRequest().body(e),
+    };
 
     enemy.set_str(form.str);
     enemy.set_dex(form.dex);
@@ -832,7 +863,10 @@ async fn enemy_set_skills(path: web::Path<String>, form: web::Json<Vec<String>>)
         return HttpResponse::NotFound().finish();
     }
 
-    let mut enemy = Enemy::load(data_path);
+    let mut enemy = match Enemy::load(data_path) {
+        Ok(e) => e,
+        Err(e) => return HttpResponse::BadRequest().body(e),
+    };
 
     enemy.set_skills(form.into_inner());
 
@@ -875,7 +909,7 @@ macro_rules! parse_riv {
                     let consonant = &effect
                         .chars()
                         .last()
-                        .expect("Effect name is empty")
+                        .expect("Effect name is empty") // Should not happen.
                         .to_string();
                     participle = participle + consonant + consonant + "ed";
 
@@ -905,7 +939,10 @@ async fn enemy_set_riv(path: web::Path<String>, form: web::Json<EnemyRIVForm>) -
         return HttpResponse::NotFound().finish();
     }
 
-    let mut enemy = Enemy::load(data_path);
+    let mut enemy = match Enemy::load(data_path) {
+        Ok(e) => e,
+        Err(e) => return HttpResponse::BadRequest().body(e),
+    };
 
     /* Set resistances: */
     enemy.set_resistances(parse_riv!(form.resistances));
@@ -935,7 +972,10 @@ async fn enemy_add_ability_trees(
         return HttpResponse::NotFound().finish();
     }
 
-    let mut enemy = Enemy::load(data_path);
+    let mut enemy = match Enemy::load(data_path) {
+        Ok(e) => e,
+        Err(e) => return HttpResponse::BadRequest().body(e),
+    };
 
     for tree_name in form.into_inner() {
         enemy.add_ability_tree(tree_name);
@@ -960,13 +1000,18 @@ async fn enemy_add_ability(
         return HttpResponse::NotFound().finish();
     }
 
-    let mut enemy = Enemy::load(data_path);
+    let mut enemy = match Enemy::load(data_path) {
+        Ok(e) => e,
+        Err(e) => return HttpResponse::BadRequest().body(e),
+    };
 
     let tree = form.tree.clone();
     if !enemy.ability_trees().contains_key(&tree) {
         return HttpResponse::BadRequest().body(tree.0);
     }
-    enemy.add_ability(&tree, form.name.clone(), form.description.clone());
+    if let Err(e) = enemy.add_ability(&tree, form.name.clone(), form.description.clone()) {
+        return HttpResponse::BadRequest().body(e);
+    }
 
     enemy.save();
 
@@ -984,7 +1029,10 @@ async fn enemy_add_note(path: web::Path<String>, form: web::Json<String>) -> Htt
         return HttpResponse::NotFound().finish();
     }
 
-    let mut enemy = Enemy::load(data_path);
+    let mut enemy = match Enemy::load(data_path) {
+        Ok(e) => e,
+        Err(e) => return HttpResponse::BadRequest().body(e),
+    };
 
     enemy.add_misc(form.into_inner().clone());
 
@@ -1005,7 +1053,10 @@ async fn enemy_del_note(path: web::Path<String>, form: web::Json<usize>) -> Http
         return HttpResponse::NotFound().finish();
     }
 
-    let mut enemy = Enemy::load(data_path);
+    let mut enemy = match Enemy::load(data_path) {
+        Ok(e) => e,
+        Err(e) => return HttpResponse::BadRequest().body(e),
+    };
 
     let idx = form.into_inner();
     if idx > enemy.misc().len() {
@@ -1030,7 +1081,10 @@ async fn enemy_set_image(path: web::Path<String>, form: web::Json<String>) -> Ht
         return HttpResponse::NotFound().finish();
     }
 
-    let mut enemy = Enemy::load(data_path);
+    let mut enemy = match Enemy::load(data_path) {
+        Ok(e) => e,
+        Err(e) => return HttpResponse::BadRequest().body(e),
+    };
 
     let image_url = form.into_inner();
 
@@ -1075,7 +1129,10 @@ async fn reveal_enemy(path: web::Path<String>) -> HttpResponse {
         return HttpResponse::NotFound().finish();
     }
 
-    let mut enemy = Enemy::load(data_path);
+    let mut enemy = match Enemy::load(data_path) {
+        Ok(e) => e,
+        Err(e) => return HttpResponse::BadRequest().body(e),
+    };
 
     enemy.set_revealed(true);
 
@@ -1097,7 +1154,10 @@ async fn reveal_enemy_info(path: web::Path<(String, String)>) -> HttpResponse {
         return HttpResponse::NotFound().finish();
     }
 
-    let mut enemy = Enemy::load(data_path);
+    let mut enemy = match Enemy::load(data_path) {
+        Ok(e) => e,
+        Err(e) => return HttpResponse::BadRequest().body(e),
+    };
 
     match info.as_str() {
         "basics" => {
@@ -1121,7 +1181,9 @@ async fn reveal_enemy_info(path: web::Path<(String, String)>) -> HttpResponse {
 
             for (tree_name, ability_tree) in enemy.clone().ability_trees() {
                 for ability_name in ability_tree.keys() {
-                    enemy.reveal_ability(tree_name, ability_name.clone());
+                    if let Err(e) = enemy.reveal_ability(tree_name, ability_name.clone()) {
+                        return HttpResponse::BadRequest().body(e);
+                    }
                 }
             }
         }
@@ -1145,7 +1207,10 @@ async fn reveal_enemy_ability(path: web::Path<String>, form: web::Json<IString>)
         return HttpResponse::NotFound().finish();
     }
 
-    let mut enemy = Enemy::load(data_path);
+    let mut enemy = match Enemy::load(data_path) {
+        Ok(e) => e,
+        Err(e) => return HttpResponse::BadRequest().body(e),
+    };
 
     let ability = form.into_inner();
     let tree = enemy
@@ -1154,7 +1219,9 @@ async fn reveal_enemy_ability(path: web::Path<String>, form: web::Json<IString>)
         .find(|(_, tree)| tree.contains_key(&ability));
 
     if let Some((tree_name, _)) = tree {
-        enemy.reveal_ability(&tree_name.clone(), ability);
+        if let Err(e) = enemy.reveal_ability(&tree_name.clone(), ability) {
+            return HttpResponse::BadRequest().body(e);
+        }
     } else {
         return HttpResponse::BadRequest().body(ability.0);
     }
@@ -1176,7 +1243,10 @@ async fn refresh_enemy_page(path: web::Path<String>) -> HttpResponse {
         return HttpResponse::NotFound().finish();
     }
 
-    let enemy = Enemy::load(data_path);
+    let enemy = match Enemy::load(data_path) {
+        Ok(e) => e,
+        Err(e) => return HttpResponse::BadRequest().body(e),
+    };
 
     enemy.generate_markdown();
 
